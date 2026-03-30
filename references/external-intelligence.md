@@ -295,7 +295,7 @@ What to look for:
 ```
 → State: "No known external issue found for this combination"
 → This is a new/unique bug
-→ Continue to Phase 3.5 (Find the Lies) and Phase 3.6 (Forensic Logging)
+→ Continue to Phase 3.7 (Find the Lies) and Phase 3.8 (Forensic Logging)
 → The forensic approach will prove the root cause
 ```
 

@@ -31,13 +31,18 @@ If the user invokes this skill with the argument `update`
 Instead, run the update check:
 
 ```
-STEP 1: Run the update script
-  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
+STEP 1: Locate the update script (check both install locations)
+  Personal install:  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
+  Project install:   bash .claude/skills/nuclear-bug-fix/scripts/update.sh
+
+  Try personal first. If the file does not exist, try project.
+  If neither exists: the skill was not installed from a directory; use manual update.
 
 STEP 2: Report what happened
   - If already up to date:  "nuclear-bug-fix is current (version: <hash>)"
   - If updated:             "Updated nuclear-bug-fix <old> → <new>. Changes: <url>"
-  - If error:               Show the error and the manual install command
+  - If error:               Show the error and the manual install command:
+                            curl -L https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/dist/nuclear-bug-fix.skill -o /tmp/nuclear-bug-fix.skill && claude skills add /tmp/nuclear-bug-fix.skill --force
 
 The update script handles everything. Just run it and report the output.
 Do not proceed to the bug-fix methodology when the argument is "update".
@@ -64,7 +69,8 @@ Debugging is an art only when you can't reproduce the bug. Until you can make it
 Step 1: Can you make it fail RIGHT NOW, on demand?
   YES → You have a Bohrbug. Complete Steps 2–4 below, then go to Phase 1.
   NO  → This is a Heisenbug, Mandelbug, or one-time event.
-        Complete Steps 2–4 below, then go to Phase 2D Bug Classification.
+        Complete Steps 2–4 below, then go to Phase 2 (start from 2A).
+        Phase 2D will classify the bug type after 2A/2B/2C routing runs.
 
 Step 2: Stimulate — do NOT simulate.
   STIMULATE = Use the real environment, real data, real conditions.
@@ -290,7 +296,7 @@ Before diagnosing the code, verify the debugging setup itself is not lying:
 
 ## PHASE 3 — ADVERSARIAL DIAGNOSIS
 
-Execute in this exact order. Do not skip any step.
+Execute steps in this order. Conditional steps are marked — skip them when their condition does not apply. All others are mandatory.
 
 ### 3.0 — CHECK THE PLUG (Obvious First)
 
@@ -347,7 +353,10 @@ List **5–10 possible root causes** — including the embarrassing ones:
 - Error caught and swallowed silently in a try/catch somewhere
 - Two bugs interacting — fixing one reveals the other
 
-### 3.3 — LAST KNOWN GOOD ANALYSIS
+### 3.3 — LAST KNOWN GOOD ANALYSIS *(run only if this is a regression)*
+
+Skip this step if the bug is new — i.e. there was never a working version.
+Run this step if it worked before and now it doesn't.
 
 If the bug is a regression (worked before, broken now):
 
@@ -571,21 +580,24 @@ This gate forces you to find that eliminating evidence — or admit it doesn't e
 
 **Load `references/ddx-gate.md` before executing this step.**
 
-**FAST-PATH (use when direct proof is unambiguous):**
+**FAST-PATH (use only when direct proof is unambiguous):**
 
-If forensic logs show direct proof — exact line, exact value, exact mechanism,
-and no other explanation is logically possible — you may skip Steps 1-3 and
-go directly to Step 4 with HIGH confidence.
+If forensic logs show direct, unambiguous proof — exact line, exact value, exact
+mechanism — AND no other explanation is logically possible, you may bypass the
+full gate and issue a HIGH-confidence verdict directly.
 
 Fast-path requires ALL of the following:
 ```
-□ The log shows the exact failure (not just "consistent with" the failure)
-□ The mechanism is deterministic — one cause, one effect, no timing dependency
-□ The fix is precise and does not affect any other code path
+□ The log shows the exact failure mechanism (not just "consistent with" the failure)
+□ The cause is deterministic — one cause, one effect, no timing dependency
+□ The fix is precise and affects only the proven failure point
 □ A reasonable engineer reading the log would have no alternative explanation
 ```
 
-If any of the above are uncertain → run the full gate.
+If ALL four are true → issue the verdict with HIGH confidence. State the proof
+explicitly in the verdict as: "Direct proof: [log line / result that proves it]"
+
+If ANY is uncertain → run the full gate (Steps 1–5 below).
 
 ---
 
@@ -750,10 +762,11 @@ IF CONFIDENCE IS MEDIUM — FLAG THIS:
 
 
 
-### 3.11 — 5 WHYS (After Initial Verdict — Find the Real Root Cause)
+### 3.11 — 5 WHYS *(mandatory for bugs > 30 minutes; skip for trivial one-line fixes)*
 
-The first answer is rarely the root cause. It is a symptom.
-Apply 5 Whys to dig to the actual cause underneath the cause.
+The first answer is rarely the real root cause. It is a symptom.
+Apply 5 Whys to find the systemic cause — the thing to fix so this class
+of bug never recurs.
 
 ```
 Format:
@@ -843,6 +856,8 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
 | `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
+| `references/intermittent-race-bugs.md` | ANY intermittent failure, Heisenbug, race condition, flaky test, "only sometimes", "only under load" | Signature hunting, race window amplification, non-invasive logging, TSan tools, 8 race types with prove+fix, Fix Ladder, verification |
+| `references/world-methods.md` | Mandelbug (chaotic, every fix reveals more bugs), multi-factor incident (3+ contributing factors), bug unsolved after 2+ hours | Agans' 9 Rules, bug taxonomy, 5 Whys deep-dive, Fishbone/Ishikawa, Fault Tree Analysis, Google SRE postmortem, Chaos Engineering |
 | `references/ddx-gate.md` | Always — load before executing step 3.9 | ACH methodology, evidence matrix, cognitive bias catalog, common false diagnoses, confidence calibration |
 | `references/external-intelligence.md` | Version mismatch, library-specific error, protocol bug, CVE suspected | RFC lookup, changelog analysis, GitHub issues, CVE database, MDN/caniuse |
 
@@ -974,13 +989,13 @@ state it as a confirmed known bug with source link.
 10. **Exact versions required.** They unlock known-bug detection.
 11. **Docs trump assumptions.** Official docs say it works differently → code is wrong.
 12. **RFC is ground truth for protocols.** HTTP, OAuth, JWT, WebSocket, SMTP checked against spec.
+13. **Mandelbug? Stop patching.** Map the full dependency graph. Find which layer owns ambiguous state. Fix the architecture, not the symptom.
 
 **For intermittent / race bugs:**
-13. **Intermittent = uncontrolled variable.** It is NOT random. Find the variable that determines whether it fires.
-14. **Never breakpoint a Heisenbug.** Breakpoints change timing and make the race disappear. Use nanosecond-timestamp logging and operation IDs only.
-15. **Amplify before diagnosing.** Add artificial sleep at the suspected race window. Fires consistently → window confirmed. Remove sleep, fix synchronization.
-16. **Run TSan first.** Go: -race, C/C++: -fsanitize=thread, Java: JCStress. Finds in one run what humans miss in days.
-17. **Mandelbug? Stop patching.** Map the full dependency graph. Fix the architecture, not the symptom.
+14. **Intermittent = uncontrolled variable.** It is NOT random. Find the variable that determines whether it fires.
+15. **Never breakpoint a Heisenbug.** Breakpoints change timing and make the race disappear. Use nanosecond-timestamp logging and operation IDs only.
+16. **Amplify before diagnosing.** Add artificial sleep at the suspected race window. Fires consistently → window confirmed. Remove sleep, fix synchronization.
+17. **Run TSan first.** Go: -race, C/C++: -fsanitize=thread, Java: JCStress. Finds in one run what humans miss in days.
 
 **Before issuing the verdict:**
 18. **Run the DDx Gate. No exceptions.** A verdict without the gate is a guess wearing a suit.
@@ -1005,4 +1020,3 @@ state it as a confirmed known bug with source link.
 33. **Silent failure?** Find the swallow. Something is catching and dropping the error.
 34. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
 35. **Never revisit closed paths.** Already tried = dead path. Move on.
-
