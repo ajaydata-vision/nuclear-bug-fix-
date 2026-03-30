@@ -1,0 +1,8 @@
+{
+  "skill": "nuclear-bug-fix",
+  "version": "e890e27",
+  "source_commit": "e890e279284582c1b2d7eb4d4aae3d4a7b86fd2e",
+  "source_date": "2026-03-30",
+  "source_subject": "fix: unify release version source of truth",
+  "artifact": "dist/nuclear-bug-fix.skill"
+}

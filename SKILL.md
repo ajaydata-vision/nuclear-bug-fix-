@@ -1,7 +1,7 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: a531cc3
+  version: e890e27
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
