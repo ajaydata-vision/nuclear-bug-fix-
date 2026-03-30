@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.2",
-  "source_commit": "8522c95427985d1a23c181ed2a9c3aa958a42ef8",
-  "source_commit_short": "8522c95",
+  "version": "1.3",
+  "source_commit": "93e4380f634fe042ef19497354ed16a1731c79e2",
+  "source_commit_short": "93e4380",
   "source_date": "2026-03-30",
-  "source_subject": "Clarify setup files by shell in README",
+  "source_subject": "Ship Windows updater and Git Bash path fixes",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
