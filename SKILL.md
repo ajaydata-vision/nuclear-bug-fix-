@@ -69,7 +69,9 @@ Debugging is an art only when you can't reproduce the bug. Until you can make it
 Step 1: Can you make it fail RIGHT NOW, on demand?
   YES → You have a Bohrbug. Complete Steps 2–4 below, then go to Phase 1.
   NO  → This is a Heisenbug, Mandelbug, or one-time event.
-        Complete Steps 2–4 below, then go to Phase 2 (start from 2A).
+        Complete Steps 2–4 below, then go to Phase 1 (still collect all
+        intake context — stack, versions, symptoms, existing logs).
+        After intake, go to Phase 2 (start from 2A).
         Phase 2D will classify the bug type after 2A/2B/2C routing runs.
 
 Step 2: Stimulate — do NOT simulate.
@@ -177,7 +179,7 @@ Multiple domains? Load ALL relevant files. Frontend bug calling backend API = lo
 | Resource found, interaction silently ignored | Interception layer (overlay, middleware, proxy, wrapper) |
 | Works locally, fails in prod/staging | Environment mismatch (config, secrets, versions, timing) |
 | Worked before, broken after change | Regression — recent change is the cause |
-| Fails only sometimes / under load | Race condition / async gap / resource exhaustion → load `references/intermittent-race-bugs.md` |
+| Fails only sometimes / under load | Race condition / async gap / resource exhaustion |
 | Write succeeds, read returns stale data | Caching / transaction isolation / wrong replica |
 | API returns 2xx, nothing changes | Silent swallow / wrong endpoint / payload mismatch |
 | Script runs, output is wrong | Format/type/encoding mismatch / off-by-one / wrong input file |
@@ -289,7 +291,7 @@ Before diagnosing the code, verify the debugging setup itself is not lying:
    - Fix for Bug A revealing Bug B (which was always there)?
 
 5. **Can you add logs / access the environment at all?**
-   - If NO log access: use external intelligence (Phase 3.6) and binary search (Phase 3.4) exclusively.
+   - If NO log access: rely primarily on external intelligence (Phase 3.6) and binary search (Phase 3.4). Still run the DDx Gate (3.9) — it operates on whatever evidence is available.
    - If NO code access: external intelligence becomes the primary diagnostic tool.
 
 ---
@@ -1000,7 +1002,7 @@ state it as a confirmed known bug with source link.
 17. **Run TSan first.** Go: -race, C/C++: -fsanitize=thread, Java: JCStress. Finds in one run what humans miss in days.
 
 **Before issuing the verdict:**
-18. **Run the DDx Gate. No exceptions.** A verdict without the gate is a guess wearing a suit.
+18. **Run the DDx Gate. Always.** A verdict without the gate is a guess wearing a suit. Fast-path (direct unambiguous proof) still counts as running the gate — see 3.9 for criteria.
 19. **Consistency ≠ proof.** Evidence consistent with your hypothesis but also consistent with an alternative eliminates nothing. Only INCONSISTENT evidence eliminates.
 20. **Steelman every alternative.** Make the best possible case FOR each competing hypothesis. Weak strawmen produce false confidence.
 21. **Gate failure = evidence collection plan.** Specify exactly what log/test/check would close it. Not a new guess — a precise research plan.
@@ -1012,7 +1014,7 @@ state it as a confirmed known bug with source link.
 25. **Sentinel log in every fix.** Confirm the fix is actually running.
 26. **Change one thing at a time.** Two changes = you don't know what fixed it.
 27. **If you didn't fix it, it ain't fixed.** Must fail under old conditions. Must pass after fix. Same conditions.
-28. **Apply 5 Whys after verdict.** The first answer is a symptom. The 5th Why is the root cause.
+28. **Apply 5 Whys after verdict.** *(skip for trivial one-line fixes)* The first answer is a symptom. The 5th Why is the root cause.
 29. **Write the micro-postmortem.** Every bug > 1 hour: root cause, what caught it, what prevents recurrence.
 
 **If the fix fails:**

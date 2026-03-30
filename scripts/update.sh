@@ -14,9 +14,14 @@ COMMITS_API="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits/mai
 COMPARE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/compare"
 
 # ── 1. Read installed version from metadata block in SKILL.md ────────────────
+# Check personal install first, then project install
 installed_version=""
+PROJECT_SKILL_MD=".claude/skills/${SKILL_NAME}/SKILL.md"
 if [[ -f "$SKILL_MD" ]]; then
   installed_version=$(grep -E "^\s+version:" "$SKILL_MD" 2>/dev/null \
+    | head -1 | awk '{print $2}' | tr -d '"' | tr -d "'")
+elif [[ -f "$PROJECT_SKILL_MD" ]]; then
+  installed_version=$(grep -E "^\s+version:" "$PROJECT_SKILL_MD" 2>/dev/null \
     | head -1 | awk '{print $2}' | tr -d '"' | tr -d "'")
 fi
 
@@ -38,6 +43,14 @@ api_response=$(curl -sf \
   echo "     claude skills add /tmp/${SKILL_NAME}.skill --force"
   exit 1
 }
+
+if ! command -v python3 &>/dev/null; then
+  echo "❌ python3 is required to parse the GitHub API response but was not found in PATH."
+  echo "   Install python3 or use the manual install command:"
+  echo "     curl -L ${DIST_URL} -o /tmp/${SKILL_NAME}.skill"
+  echo "     claude skills add /tmp/${SKILL_NAME}.skill --force"
+  exit 1
+fi
 
 latest_full=$(echo "$api_response" | python3 -c \
   "import sys,json; print(json.load(sys.stdin)['sha'])" 2>/dev/null) || {
@@ -70,6 +83,7 @@ echo ""
 
 # ── 5. Download built .skill from dist/ ──────────────────────────────────────
 TMP="/tmp/${SKILL_NAME}-${latest_short}.skill"
+trap 'rm -f "${TMP}"' EXIT   # guarantee cleanup on any exit (set -e, error, normal)
 echo "   Downloading..."
 curl -sf -L "${DIST_URL}" -o "${TMP}" || {
   echo ""
