@@ -1,0 +1,94 @@
+{
+  "skill_name": "nuclear-bug-fix",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "silent-failure-angular",
+      "prompt": "My Python automation script opens a website and the Angular Material date picker becomes visible and opens correctly, but the date is never actually set. No error is thrown. The element is found, no StaleElementException. I have tried .click(), send_keys(), ActionChains — nothing works. Code review found nothing. The website uses Angular. Stack: Python 3.11, Selenium 4.18, ChromeDriver 120. I'm passing the date as DD-MM-YYYY format.",
+      "expected_output": "Skill runs full diagnostic: identifies NgZone event bypass as root cause via DDx Gate, eliminates competing hypotheses (wrong format, overlay, stale element), produces forensic logging code with elementFromPoint check, issues BEFORE/AFTER fix using dispatchEvent with bubbles:true, includes confidence score.",
+      "files": [],
+      "expectations": [
+        "Skill asks intake questions before diagnosing, or extracts answers from the prompt",
+        "Skill classifies the bug domain correctly (Frontend/Automation)",
+        "Skill identifies Angular NgZone event bypass as the root cause",
+        "Skill generates the DDx Gate with at least 2 competing hypotheses (e.g. overlay blocking, wrong date format, stale element)",
+        "Skill produces a confidence score (HIGH or MEDIUM) on the verdict",
+        "Skill provides a BEFORE code snippet (the broken .click() or send_keys approach)",
+        "Skill provides an AFTER code snippet using dispatchEvent or equivalent Angular-compatible approach",
+        "Skill includes forensic logging code (elementFromPoint or element state logging)",
+        "Verdict states Angular's NgZone or event zone as the mechanism",
+        "Skill does NOT revisit closed paths (send_keys, ActionChains already tried)"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "intermittent-production-race",
+      "prompt": "Our Node.js API randomly returns 500 errors in production — roughly 1 in 500 requests. Works perfectly in dev and staging. No pattern to when it fails. Sometimes the logs show a database timeout, sometimes a null reference, sometimes nothing at all. We've been debugging for 3 days. Stack: Node.js 20.11, Express 4.18, Prisma 5.9, PostgreSQL 16, deployed on AWS ECS with 4 instances.",
+      "expected_output": "Skill classifies as Heisenbug, loads intermittent-race-bugs.md, runs signature hunting to find the uncontrolled variable, recommends amplification techniques (load testing, parallel execution), specifies non-invasive logging strategy with operation IDs and nanosecond timestamps, checks TSan equivalent for Node, and does NOT use breakpoints.",
+      "files": [],
+      "expectations": [
+        "Skill classifies the bug type as Heisenbug or intermittent",
+        "Skill explicitly states NOT to use debugger breakpoints for this bug type",
+        "Skill asks for or addresses: when does it fail (time of day, load level, specific conditions)",
+        "Skill mentions finding the uncontrolled variable or the trigger condition",
+        "Skill recommends running the failing scenario with increased concurrency (load amplification)",
+        "Skill provides non-invasive logging strategy using operation IDs or timestamps",
+        "Skill considers multi-instance race condition (4 ECS instances mentioned)",
+        "Skill does NOT immediately jump to a specific code fix without evidence",
+        "Skill references or applies intermittent bug diagnosis methodology"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "regression-after-upgrade",
+      "prompt": "After upgrading from React 17 to React 18, our form submission broke. The submit handler fires (I can see the console.log at the top of the function), but nothing happens after that — no API call, no state update, no error. Works on React 17. No console errors in React 18. Stack: React 18.2, TypeScript 5.0, Vite 5.0.",
+      "expected_output": "Skill runs Last Known Good Analysis (worked in React 17, broken in React 18), checks React 18 breaking changes, particularly automatic batching and concurrent features, generates DDx Gate with alternatives, provides specific forensic logging to trace execution path through the handler.",
+      "files": [],
+      "expectations": [
+        "Skill identifies this as a regression bug (worked before, broken after change)",
+        "Skill performs Last Known Good Analysis — asks what changed between React 17 and React 18",
+        "Skill checks or mentions React 18 breaking changes or migration guide",
+        "Skill uses version intelligence — React 18 is the key delta",
+        "Skill traces execution path through the submit handler to find where it stops",
+        "Skill generates the DDx Gate with at least 2 competing hypotheses",
+        "Skill provides specific forensic logging code for tracing handler execution",
+        "Skill does NOT suggest downgrading to React 17 as the fix",
+        "Skill produces a verdict with BEFORE/AFTER or specific investigation steps"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "ddx-gate-multi-hypothesis",
+      "prompt": "PostgreSQL database writes succeed (INSERT/UPDATE returns success, no error), but immediately reading back the same record returns the old value. This happens consistently, not just sometimes. We're using Django 4.2 with Psycopg2 3.1 on Python 3.11. The read happens in the same request handler, right after the write.",
+      "expected_output": "Skill runs full DDx Gate: generates 3 competing hypotheses (caching, transaction isolation, read from replica, Django ORM caching), systematically eliminates each with specific evidence tests, produces evidence matrix, assigns confidence score, and provides precise forensic queries to distinguish between hypotheses.",
+      "files": [],
+      "expectations": [
+        "Skill generates at least 3 competing hypotheses for the read-after-write failure",
+        "Competing hypotheses include at least two of: Django ORM cache, PostgreSQL read replica lag, transaction not committed, connection to different DB instance",
+        "Skill runs the DDx Gate and produces an evidence matrix or structured elimination",
+        "Skill provides specific SQL queries or code to eliminate each competing hypothesis",
+        "Skill distinguishes between 'consistent failure' (not intermittent) and maps this correctly",
+        "Skill assigns a confidence score to the verdict",
+        "Verdict correctly identifies the most likely cause and states it with specificity",
+        "Skill provides BEFORE/AFTER fix or precise investigation checklist"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "trigger-and-intake",
+      "prompt": "I've tried everything and this bug just won't go away. It's driving me insane.",
+      "expected_output": "Skill triggers and starts the structured intake process — asks for the 8 intake questions (symptom, failure point, recent changes, closed paths, existing logs, code, stack, consistent/intermittent) in one organized message. Does NOT start diagnosing without information.",
+      "files": [],
+      "expectations": [
+        "Skill triggers and responds (does not give a generic non-skill response)",
+        "Skill asks for intake information before attempting any diagnosis",
+        "Skill asks for the symptom or what happens vs what should happen",
+        "Skill asks about what has already been tried (closed paths)",
+        "Skill asks for the tech stack or relevant technology information",
+        "Skill does NOT issue a diagnosis or suggest fixes without any information",
+        "Skill asks multiple intake questions in a single organized message (not scattered)",
+        "Response is structured and methodical, not a generic 'tell me more' reply"
+      ]
+    }
+  ]
+}
