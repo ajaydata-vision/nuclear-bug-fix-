@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
 
-# Prevent loop: skip when this workflow is the one committing
+# Prevent loop: skip bot-authored pushes and already-built release commits.
 jobs:
   build:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'ci: build dist @')
     runs-on: ubuntu-latest
     permissions:
       contents: write
