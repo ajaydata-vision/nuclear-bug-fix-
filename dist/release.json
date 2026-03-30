@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.1",
-  "source_commit": "eacb5238072369fc5f4817617bd077dd356f9a91",
-  "source_commit_short": "eacb523",
+  "version": "1.2",
+  "source_commit": "8522c95427985d1a23c181ed2a9c3aa958a42ef8",
+  "source_commit_short": "8522c95",
   "source_date": "2026-03-30",
-  "source_subject": "release: prepare v1.1 metadata",
+  "source_subject": "Clarify setup files by shell in README",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

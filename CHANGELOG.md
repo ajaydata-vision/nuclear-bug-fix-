@@ -1,6 +1,10 @@
 # Changelog
 
-## [1.2] - Unreleased
+## [1.3] - Unreleased
+
+- No unreleased changes yet.
+
+## [1.2] - 2026-03-30
 
 - Added direct installers for Claude Code's documented skill directories on macOS/Linux and Windows PowerShell.
 - Added a local repo installer for personal and project-scoped installs.
