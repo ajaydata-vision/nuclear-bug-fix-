@@ -567,15 +567,165 @@ log("[DEBUG] ★★★ FIXED CODE EXECUTING v2 ★★★")
 # If you don't see this in output → wrong code is running
 ```
 
-### 3.9 — VERDICT
+### 3.9 — DIFFERENTIAL DIAGNOSIS GATE (Mandatory Before Verdict)
 
-Give **one** root cause. Not a list. Not "possibly". Stated as fact.
+**This gate exists to prevent the most common failure in debugging: issuing a verdict
+that the evidence is consistent with, but does not uniquely prove.**
 
-Structure:
+Consistency with evidence ≠ proof.
+Evidence that supports your hypothesis but ALSO supports an alternative
+does NOT eliminate that alternative. Only evidence that is INCONSISTENT
+with an alternative eliminates it.
+
+This gate forces you to find that eliminating evidence — or admit it doesn't exist yet.
+
+**Load `references/ddx-gate.md` before executing this step.**
+
+---
+
+**STEP 1 — GENERATE COMPETING HYPOTHESES**
+
+List the 3 strongest alternative explanations for the same symptom.
+Do NOT generate strawmen. These must be genuinely plausible.
+Steelman each one — make the best possible case FOR it.
+
 ```
-ROOT CAUSE: [one sentence, specific]
+PRIMARY HYPOTHESIS (PH):
+[The root cause you currently believe]
 
-WHY THIS HAPPENED: [one sentence explaining the mechanism]
+COMPETING HYPOTHESIS 1 (CH-1):
+[The most plausible alternative — what a skeptic would say]
+
+COMPETING HYPOTHESIS 2 (CH-2):
+[Second most plausible alternative]
+
+COMPETING HYPOTHESIS 3 (CH-3):
+[Third most plausible alternative]
+```
+
+---
+
+**STEP 2 — EVIDENCE MATRIX**
+
+For each piece of evidence collected in 3.8, classify it:
+
+```
+| Evidence | Supports PH? | Consistent with CH-1? | Consistent with CH-2? | Consistent with CH-3? |
+|---|---|---|---|---|
+| [evidence 1] | YES/NO | YES/NO | YES/NO | YES/NO |
+| [evidence 2] | YES/NO | YES/NO | YES/NO | YES/NO |
+| [forensic log result] | YES/NO | YES/NO | YES/NO | YES/NO |
+
+KEY INSIGHT:
+Any row where CH-x = YES means that evidence does NOT eliminate CH-x.
+You need a row where CH-x = NO to eliminate it.
+Evidence that eliminates an alternative is called DIAGNOSTIC evidence.
+Evidence that merely doesn't contradict is called CONSISTENT evidence.
+Consistent evidence proves nothing. Only diagnostic evidence eliminates.
+```
+
+---
+
+**STEP 3 — ELIMINATION ATTEMPTS**
+
+For each competing hypothesis, answer these two questions:
+
+```
+CH-1: [name]
+  STEELMAN: Why could this be right?
+    [make the strongest possible case for CH-1]
+  ELIMINATOR: What evidence would make CH-1 IMPOSSIBLE?
+    [what would have to be true for CH-1 to be wrong?]
+  DO WE HAVE THAT EVIDENCE?
+    YES → CH-1 ELIMINATED. Evidence: [cite specific log/check/result]
+    NO  → CH-1 STILL POSSIBLE → GO TO STEP 4 before issuing verdict
+
+CH-2: [name]
+  [same structure]
+
+CH-3: [name]
+  [same structure]
+```
+
+---
+
+**STEP 4 — GATE CHECK AND CONFIDENCE SCORE**
+
+```
+GATE CHECKLIST:
+□ PH is supported by DIRECT forensic proof (not just absence of alternatives)
+□ CH-1 eliminated by specific evidence that is INCONSISTENT with CH-1
+□ CH-2 eliminated by specific evidence that is INCONSISTENT with CH-2
+□ CH-3 eliminated by specific evidence that is INCONSISTENT with CH-3
+
+SENSITIVITY CHECK:
+If the key evidence FOR the primary hypothesis turned out to be wrong:
+  Would the verdict still hold? YES → High. NO → Medium.
+
+CONFIDENCE SCORE:
+  HIGH   (90-95%) → PH directly proven by forensic logs
+                    AND all 3 CH eliminated by diagnostic evidence
+                    AND sensitivity check passes
+
+  MEDIUM (70-85%) → PH consistent with all evidence
+                    AND alternatives eliminated mainly by absence
+                    (no evidence FOR them, but no smoking-gun AGAINST either)
+                    OR sensitivity check fails
+
+  LOW    (50-65%) → PH plausible but competing hypothesis not eliminated
+                    More evidence needed before issuing verdict
+
+  BLOCK  (<50%)   → Evidence is ambiguous between two or more hypotheses
+                    DO NOT issue verdict. Run Step 5 instead.
+
+GATE STATUS:
+  PASS (High or Medium) → Proceed to 3.10 VERDICT
+  FAIL (Low or Block)   → Run Step 5 — collect eliminating evidence
+```
+
+---
+
+**STEP 5 — EVIDENCE COLLECTION PLAN (If Gate Fails)**
+
+If the gate fails, do not guess. Specify exactly what evidence would close it:
+
+```
+TO ELIMINATE CH-[x] I NEED TO OBSERVE:
+  [exact log line / test result / check output that would make CH-x impossible]
+
+HOW TO GET THAT EVIDENCE:
+  [exact forensic log to add / test to run / check to perform]
+
+EXPECTED RESULT IF PH IS CORRECT:
+  [what the evidence will show if PH is true]
+
+EXPECTED RESULT IF CH-x IS CORRECT:
+  [what the evidence will show if CH-x is true instead]
+```
+
+This is not a dead end — it is a precise research plan.
+Collect the evidence. Come back. Re-run the gate.
+
+---
+
+### 3.10 — VERDICT (Issued Only After DDx Gate Passes)
+
+The verdict includes the gate's confidence score. It is non-negotiable.
+
+```
+GATE STATUS: [PASS — HIGH / PASS — MEDIUM]
+CONFIDENCE:  [HIGH 90-95% / MEDIUM 70-85%]
+
+ROOT CAUSE:
+[One sentence. Specific. Stated as fact.]
+
+WHY THIS HAPPENED:
+[One sentence explaining the mechanism.]
+
+ALTERNATIVES CONSIDERED AND ELIMINATED:
+  CH-1 [name]: Eliminated because [specific evidence]
+  CH-2 [name]: Eliminated because [specific evidence]
+  CH-3 [name]: Eliminated because [specific evidence]
 
 BEFORE:
 [the broken code]
@@ -583,10 +733,18 @@ BEFORE:
 AFTER:
 [the fixed code]
 
-WHY THIS FIX WORKS: [one sentence]
+WHY THIS FIX WORKS:
+[One sentence.]
+
+IF CONFIDENCE IS MEDIUM — FLAG THIS:
+  The verdict depends on [key evidence]. If that evidence turns out
+  to be wrong, the most likely alternative would be [CH-x].
+  Re-test under [condition] to confirm.
 ```
 
-### 3.10 — 5 WHYS (After Initial Verdict — Find the Real Root Cause)
+
+
+### 3.11 — 5 WHYS (After Initial Verdict — Find the Real Root Cause)
 
 The first answer is rarely the root cause. It is a symptom.
 Apply 5 Whys to dig to the actual cause underneath the cause.
@@ -617,12 +775,12 @@ WHY 5: Why is there no documentation?
         → ROOT CAUSE: No onboarding guide for automation testing
                       standards across the team
 
-The Phase 3.9 verdict fixes the symptom (wrong click method).
+The Phase 3.10 verdict fixes the symptom (wrong click method).
 The 5 Whys root cause identifies what to fix so it never happens again.
 BOTH fixes should be provided.
 ```
 
-### 3.11 — CHANGE ONE THING AT A TIME
+### 3.12 — CHANGE ONE THING AT A TIME
 
 When applying fixes — especially during escalation:
 ```
@@ -642,7 +800,7 @@ This is the only way to isolate what actually fixed it.
 This is also how you avoid: "it's fixed" → bug returns in 2 days.
 ```
 
-### 3.12 — GET A FRESH VIEW (If Stuck > 2 Hours)
+### 3.13 — GET A FRESH VIEW (If Stuck > 2 Hours)
 
 If 2+ hours have passed with no resolution, stop and reset:
 
@@ -679,7 +837,7 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
 | `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
-| `references/intermittent-race-bugs.md` | ANY intermittent failure, race condition, flaky test, "only under load", "only sometimes" | Signature hunting, race window amplification, TSan tools, 8 race types with prove+fix, Fix Ladder, verification |
+| `references/ddx-gate.md` | Always — load before executing step 3.9 | ACH methodology, evidence matrix, cognitive bias catalog, common false diagnoses, confidence calibration |
 | `references/external-intelligence.md` | Version mismatch, library-specific error, protocol bug, CVE suspected | RFC lookup, changelog analysis, GitHub issues, CVE database, MDN/caniuse |
 
 Each reference file has: symptom → why → how to prove → how to fix.
@@ -819,4 +977,8 @@ state it as a confirmed known bug with source link.
 26. **Fix didn't work?** Run Phase 6. Do not repeat Phase 3 with the same assumptions.
 27. **Multi-factor incident?** Map ALL contributing factors before fixing any one.
 28. **Write the micro-postmortem.** Every bug > 1 hour gets: root cause, what would have caught it, what prevents recurrence.
+29. **Run the DDx Gate. No exceptions.** A verdict issued without the gate is a guess wearing a suit.
+30. **Consistency ≠ proof.** Evidence consistent with your hypothesis but also consistent with an alternative eliminates nothing. Only INCONSISTENT evidence eliminates.
+31. **Steelman every alternative.** Make the best possible case FOR each competing hypothesis before dismissing it. Weak strawmen produce false confidence.
+32. **Gate failure = evidence collection plan.** If the gate blocks the verdict, specify exactly what log/test/check would close it. That is the next step — not a different guess.
 
