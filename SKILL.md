@@ -36,9 +36,9 @@ Debugging is an art only when you can't reproduce the bug. Until you can make it
 
 ```
 Step 1: Can you make it fail RIGHT NOW, on demand?
-  YES → Proceed to Phase 1 intake. You have a Bohrbug.
+  YES → You have a Bohrbug. Complete Steps 2–4 below, then go to Phase 1.
   NO  → This is a Heisenbug, Mandelbug, or one-time event.
-        Go to Phase 2D Bug Classification immediately.
+        Complete Steps 2–4 below, then go to Phase 2D Bug Classification.
 
 Step 2: Stimulate — do NOT simulate.
   STIMULATE = Use the real environment, real data, real conditions.
@@ -135,76 +135,7 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
-Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both. (Critical — Determines Entire Strategy)
-
-### 2D — Bug Classification (Critical — Determines Entire Strategy)
-
-Different bug types require completely different debugging strategies.
-Identify the bug type before choosing any approach.
-
-```
-BOHRBUG  — Deterministic. Reproducible. Same input → same failure.
-           Strategy: Standard. Use Phases 3–6 as written.
-           Sign: "It always fails when I do X"
-
-HEISENBUG — Disappears or changes when observed/debugged.
-            Cause: Race condition, timing, debugger alters execution,
-                   uninitialized variable, optimizer changes behavior,
-                   debug mode vs release mode difference.
-            Strategy:
-              STEP 1: Load references/intermittent-race-bugs.md immediately.
-              STEP 2: DO NOT use debugger breakpoints — they change timing.
-              STEP 3: Find the UNCONTROLLED VARIABLE (Phase A of playbook).
-              STEP 4: AMPLIFY the race window (Phase B — artificial delays,
-                      parallel loops, load amplification).
-              STEP 5: Use NON-INVASIVE logging only (Phase C — operation IDs,
-                      nanosecond timestamps, lock-free ring buffers).
-              STEP 6: Run TSan/race detector if language supports it (Phase E).
-              STEP 7: Identify the exact race type (Phase D — 8 types).
-              STEP 8: Apply fix from the Fix Ladder (Phase F — 6 levels).
-              STEP 9: Verify under same amplified conditions (Phase G).
-            Sign: "It disappears when I try to debug it"
-                  "Only fails sometimes under load"
-                  "Works fine in dev, intermittent in prod"
-
-MANDELBUG — Chaotic. Fixing one thing reveals two more bugs.
-            Cause: System grown without design over years.
-                   State space so large it cannot be reproduced reliably.
-                   Multiple interacting subsystems, no clear ownership.
-            Strategy: STOP trying to fix individual symptoms.
-                      Map the full system. Draw the dependency graph.
-                      Find the architectural flaw, not the code flaw.
-                      A workaround may be the right answer, not a fix.
-            Sign: "Every fix makes it worse or reveals new bugs"
-
-SCHROEDINBUG — Worked until someone read the code and saw it shouldn't.
-               Cause: Lucky undefined behavior. Accidental correctness.
-                      Code that cannot work in theory but worked in practice
-                      until conditions changed (load, data, version).
-               Strategy: The code IS wrong. It worked by accident.
-                         Don't try to preserve the old behavior.
-                         Rewrite the section correctly from scratch.
-               Sign: "I was reading the code and realized it can't possibly work"
-```
-
-### 2E — Contributing Factor Analysis
-
-The median production incident involves 3.5 contributing factors. Incidents with 5+ contributing factors take 3x longer to resolve.
-
-Before diagnosing, ask: Is this ONE bug or a convergence of factors?
-
-```
-Single factor:  One line is wrong. Standard Phase 3.
-Multi-factor:   Multiple conditions had to align to cause this.
-                Example: High load AND specific input AND cache miss AND
-                         connection pool at limit = all four required.
-
-If multi-factor: Map ALL contributing factors before fixing any one.
-Fixing factor 1 alone will not fix the bug.
-You need to find and address the convergence point.
-```
-
----
+Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both.
 
 ### 2B — Symptom-to-Category Map
 
@@ -256,9 +187,48 @@ Known danger combinations:
 - Bug is security/auth related → check CVEs
 → Go to Phase 3.6 (External Intelligence) immediately
 
----
+### 2D — Bug Classification (Critical — Determines Entire Strategy)
 
----
+Different bug types require completely different debugging strategies.
+
+```
+BOHRBUG  — Deterministic. Reproducible. Same input → same failure.
+           Strategy: Standard. Use Phases 3–6 as written.
+           Sign: "It always fails when I do X"
+
+HEISENBUG — Disappears or changes when observed/debugged.
+            Cause: Race condition, timing, debugger alters execution,
+                   uninitialized variable, optimizer changes behavior.
+            Strategy: Load references/intermittent-race-bugs.md.
+              No breakpoints. Find the uncontrolled variable.
+              Amplify race window. Non-invasive logging. TSan.
+            Sign: "It disappears when I try to debug it"
+
+MANDELBUG — Chaotic. Fixing one reveals two more bugs.
+            Cause: System grown without design. No clear ownership.
+            Strategy: STOP patching symptoms. Draw the full dependency
+              graph. Find which layer owns ambiguous state. Fix there.
+              A workaround may be more appropriate than a deep fix.
+            Sign: "Every fix makes it worse or reveals new bugs"
+
+SCHROEDINBUG — Worked until someone read the code and saw it shouldn't.
+               Cause: Lucky undefined behavior. Accidental correctness.
+               Strategy: Code IS wrong. Rewrite from first principles.
+                         Do NOT preserve old behavior.
+               Sign: "I realized this code can't possibly work"
+```
+
+### 2E — Contributing Factor Analysis
+
+The median production incident involves 3.5 contributing factors.
+Incidents with 5+ contributing factors take 3x longer to resolve.
+
+```
+Single factor:  One line is wrong. Standard Phase 3.
+Multi-factor:   Multiple conditions must align to trigger the bug.
+                Map ALL contributing factors before fixing any one.
+                Fixing factor 1 alone will not fix the bug.
+```
 
 ### 2F — Meta-Checks (Always Run Before Diagnosis)
 
@@ -287,14 +257,8 @@ Before diagnosing the code, verify the debugging setup itself is not lying:
    - Fix for Bug A revealing Bug B (which was always there)?
 
 5. **Can you add logs / access the environment at all?**
-   - If NO log access (prod restriction, NDA, customer system):
-     → Use external intelligence (Phase 3.6) and binary search (Phase 3.4) exclusively.
-     → Ask user to add a single sentinel log at the failure point.
-     → Work from error message + stack trace + symptom pattern matching only.
-     → Match against closest pattern in reference files.
-   - If NO code access (closed-source, proprietary):
-     → Focus entirely on configuration, env vars, version compatibility, known bugs.
-     → External intelligence becomes the primary diagnostic tool.
+   - If NO log access: use external intelligence (Phase 3.6) and binary search (Phase 3.4) exclusively.
+   - If NO code access: external intelligence becomes the primary diagnostic tool.
 
 ---
 
@@ -581,6 +545,22 @@ This gate forces you to find that eliminating evidence — or admit it doesn't e
 
 **Load `references/ddx-gate.md` before executing this step.**
 
+**FAST-PATH (use when direct proof is unambiguous):**
+
+If forensic logs show direct proof — exact line, exact value, exact mechanism,
+and no other explanation is logically possible — you may skip Steps 1-3 and
+go directly to Step 4 with HIGH confidence.
+
+Fast-path requires ALL of the following:
+```
+□ The log shows the exact failure (not just "consistent with" the failure)
+□ The mechanism is deterministic — one cause, one effect, no timing dependency
+□ The fix is precise and does not affect any other code path
+□ A reasonable engineer reading the log would have no alternative explanation
+```
+
+If any of the above are uncertain → run the full gate.
+
 ---
 
 **STEP 1 — GENERATE COMPETING HYPOTHESES**
@@ -638,7 +618,7 @@ CH-1: [name]
     [what would have to be true for CH-1 to be wrong?]
   DO WE HAVE THAT EVIDENCE?
     YES → CH-1 ELIMINATED. Evidence: [cite specific log/check/result]
-    NO  → CH-1 STILL POSSIBLE → GO TO STEP 4 before issuing verdict
+    NO  → CH-1 STILL POSSIBLE → GO TO STEP 5 — Evidence Collection Plan
 
 CH-2: [name]
   [same structure]
@@ -893,11 +873,18 @@ Run git diff or compare carefully.
 Mismatch → You fixed the wrong line. Re-read 3.7.
 ```
 
-### Step 3 — Check for a second bug
+### Step 3 — Check for a second bug, or revisit the DDx Gate
 ```
-First bug is fixed. New symptom is different from original.
-→ Two bugs were present. First fix revealed the second.
-→ Run Phase 3 again from scratch on the NEW symptom.
+CASE A: First bug is fixed. New symptom is different from original.
+  → Two bugs were present. First fix revealed the second.
+  → Run Phase 3 again from scratch on the NEW symptom.
+
+CASE B: Same symptom persists. Verdict was MEDIUM confidence.
+  → Return to the DDx Gate (3.9). The uneliminated competing
+    hypothesis is now the primary suspect.
+  → Collect the evidence specified in Step 5 of the gate.
+  → Re-run the gate with the new evidence.
+  → Issue a new verdict if the gate passes.
 ```
 
 ### Step 4 — Escalate to minimal reproduction
@@ -946,39 +933,50 @@ state it as a confirmed known bug with source link.
 
 ## IRONCLAD RULES
 
+**Before diagnosis:**
 1. **Reproduce first.** You cannot debug what you cannot reproduce. No repro = no fix.
 2. **Stimulate, never simulate.** Real environment, real data, real conditions. Always.
 3. **Preserve evidence immediately.** Logs, metrics, DB state before they're lost.
 4. **Classify the bug type.** Bohrbug, Heisenbug, Mandelbug, Schroedinbug. Each needs a different strategy.
 5. **Check the plug first.** 30 seconds on obvious checks before 4 hours of sophisticated analysis.
-6. **Fix only what is broken.** Never rewrite the whole file.
-7. **Never revisit closed paths.** Already tried = dead path. Move on.
-8. **One verdict.** Not a hedge list. Commit to the answer.
-9. **Always BEFORE / AFTER.** Never just the new code alone.
-10. **Sentinel log in every fix.** Confirm the fix is actually running.
-11. **Never assume.** Every assumption gets a log or assertion.
-12. **Change one thing at a time.** Two changes = you don't know what fixed it.
-13. **Keep an audit trail.** Every step: what I tried, what happened, what this means.
-14. **Apply 5 Whys after verdict.** The first answer is a symptom. The 5th Why is the root cause.
-15. **Meta-check first.** Verify the debugging setup before the code.
-16. **Search before concluding.** Phase 3.6 runs before forensic logs. Known bug = known fix.
-17. **Exact versions required.** They unlock known-bug detection.
-18. **Docs trump assumptions.** Official docs say it works differently → code is wrong.
-19. **RFC is ground truth for protocols.** HTTP, OAuth, JWT, WebSocket, SMTP checked against spec.
-20. **Heisenbug? No breakpoints.** Use non-invasive logging only. Production timing only.
-21. **Mandelbug? Stop patching.** Map the architecture. Fix the design, not the symptom.
-22. **If you didn't fix it, it ain't fixed.** Must fail under old conditions. Must pass after fix. Same conditions.
-23. **Intermittent = uncontrolled variable.** It is NOT random. Find the variable that determines whether it fires: load, timing, data, order, machine speed, test sequence.
-24. **Never breakpoint a Heisenbug.** Breakpoints change thread timing and make the race disappear. Use non-invasive nanosecond-timestamp logging and operation IDs only.
-25. **Amplify before diagnosing.** Add artificial sleep at the suspected race window. If bug fires consistently → race window confirmed. Then remove sleep and fix the synchronization.
-26. **Run TSan first.** If the language has a race detector (Go: -race, C/C++: -fsanitize=thread, Java: JCStress), run it before any manual analysis. It finds in one run what humans miss in days.
-24. **Silent failure?** Find the swallow. Something is catching and dropping the error.
-25. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
-26. **Fix didn't work?** Run Phase 6. Do not repeat Phase 3 with the same assumptions.
-27. **Multi-factor incident?** Map ALL contributing factors before fixing any one.
-28. **Write the micro-postmortem.** Every bug > 1 hour gets: root cause, what would have caught it, what prevents recurrence.
-29. **Run the DDx Gate. No exceptions.** A verdict issued without the gate is a guess wearing a suit.
-30. **Consistency ≠ proof.** Evidence consistent with your hypothesis but also consistent with an alternative eliminates nothing. Only INCONSISTENT evidence eliminates.
-31. **Steelman every alternative.** Make the best possible case FOR each competing hypothesis before dismissing it. Weak strawmen produce false confidence.
-32. **Gate failure = evidence collection plan.** If the gate blocks the verdict, specify exactly what log/test/check would close it. That is the next step — not a different guess.
+6. **Start the audit trail.** Open a scratch doc. Record every step from this moment.
+
+**During diagnosis:**
+7. **Never assume.** Every assumption gets a log or assertion.
+8. **Meta-check first.** Verify the debugging setup before the code.
+9. **Search before concluding.** Phase 3.6 runs before forensic logs. Known bug = known fix.
+10. **Exact versions required.** They unlock known-bug detection.
+11. **Docs trump assumptions.** Official docs say it works differently → code is wrong.
+12. **RFC is ground truth for protocols.** HTTP, OAuth, JWT, WebSocket, SMTP checked against spec.
+
+**For intermittent / race bugs:**
+13. **Intermittent = uncontrolled variable.** It is NOT random. Find the variable that determines whether it fires.
+14. **Never breakpoint a Heisenbug.** Breakpoints change timing and make the race disappear. Use nanosecond-timestamp logging and operation IDs only.
+15. **Amplify before diagnosing.** Add artificial sleep at the suspected race window. Fires consistently → window confirmed. Remove sleep, fix synchronization.
+16. **Run TSan first.** Go: -race, C/C++: -fsanitize=thread, Java: JCStress. Finds in one run what humans miss in days.
+17. **Mandelbug? Stop patching.** Map the full dependency graph. Fix the architecture, not the symptom.
+
+**Before issuing the verdict:**
+18. **Run the DDx Gate. No exceptions.** A verdict without the gate is a guess wearing a suit.
+19. **Consistency ≠ proof.** Evidence consistent with your hypothesis but also consistent with an alternative eliminates nothing. Only INCONSISTENT evidence eliminates.
+20. **Steelman every alternative.** Make the best possible case FOR each competing hypothesis. Weak strawmen produce false confidence.
+21. **Gate failure = evidence collection plan.** Specify exactly what log/test/check would close it. Not a new guess — a precise research plan.
+22. **One verdict, confidence-scored.** Not a hedge list. Commit. But state the confidence level honestly.
+
+**After the fix:**
+23. **Fix only what is broken.** Never rewrite the whole file.
+24. **Always BEFORE / AFTER.** Never just the new code alone.
+25. **Sentinel log in every fix.** Confirm the fix is actually running.
+26. **Change one thing at a time.** Two changes = you don't know what fixed it.
+27. **If you didn't fix it, it ain't fixed.** Must fail under old conditions. Must pass after fix. Same conditions.
+28. **Apply 5 Whys after verdict.** The first answer is a symptom. The 5th Why is the root cause.
+29. **Write the micro-postmortem.** Every bug > 1 hour: root cause, what caught it, what prevents recurrence.
+
+**If the fix fails:**
+30. **Fix didn't work?** Run Phase 6. Do not repeat Phase 3 with the same assumptions.
+31. **Medium confidence verdict failed?** The DDx Gate's uneliminated CH is the next suspect. Investigate it next.
+32. **Multi-factor incident?** Map ALL contributing factors before fixing any one.
+33. **Silent failure?** Find the swallow. Something is catching and dropping the error.
+34. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
+35. **Never revisit closed paths.** Already tried = dead path. Move on.
 
