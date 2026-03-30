@@ -1,18 +1,19 @@
 ---
 name: nuclear-bug-fix
 description: >
-  The most powerful bug-fixing skill for bugs that survive code review,
-  careful planning, and multiple fix attempts. Triggers on ANY stack,
-  ANY language, ANY framework. Use this skill whenever the user mentions
-  a bug that won't go away, says "I've tried everything", "still broken",
+  Most powerful bug-fixing skill for bugs surviving code review, careful
+  planning, and multiple fix attempts. Triggers on ANY stack, ANY language,
+  ANY framework. Use when user says "still broken", "tried everything",
   "code review didn't help", "nothing works", "find the bug", "help me debug",
-  "bug is not resolved", "fix is not working", or describes a silent failure.
-  Also triggers for: script runs but produces wrong output, UI interaction
-  fires but nothing changes, API returns success but state not updated,
-  DB write succeeds but read returns old data, works locally but fails in prod,
-  intermittent crashes, race conditions, wrong values, type errors, encoding
-  issues, auth failures, worked before and now broken, bug came back after fix,
-  and any bug that has already been looked at once without resolution.
+  "bug not resolved", or describes a silent failure. Also triggers for: UI
+  rendering wrong, component not updating, CSS broken in prod, hydration
+  mismatch, bundle error, CORS failure, WebSocket not connecting, API returns
+  success but state not updated, DB write returns stale data, auth token
+  rejected, background job silently failing, queue message not consumed,
+  webhook not firing, microservice not responding, pipeline failing, data
+  transform wrong, ETL dropping rows, CI/CD deploy succeeds but app broken,
+  works locally but fails in prod, intermittent crashes, race conditions,
+  bug came back after fix, any bug already looked at once.
   ALWAYS use this skill instead of a generic debugging response.
 ---
 
@@ -80,7 +81,20 @@ Extract answers from the conversation first — only ask for what is missing.
 Classify the bug before writing any diagnosis.
 Pick the top 2 most likely categories before proceeding.
 
-### 2A — Symptom-to-Category Map
+### 2A — Domain Classification (Route to Correct Reference File)
+
+Identify the domain FIRST — determines which reference file to load in Phase 4.
+
+| Domain | Signals | Reference File |
+|---|---|---|
+| **Frontend** | UI not rendering, CSS broken, component state wrong, hydration error, bundle error, browser-only bug, routing broken, form not submitting, WebSocket UI issue | `references/frontend-patterns.md` |
+| **Backend** | API response wrong, auth failing, DB issue, background job silent, queue not consumed, file upload broken, rate limit wrong, session bug, ORM query wrong | `references/backend-patterns.md` |
+| **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
+| **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
+
+Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both.
+
+### 2B — Symptom-to-Category Map
 
 | Symptom Signal | Root Cause Category |
 |---|---|
@@ -314,16 +328,20 @@ Do not rewrite the whole file. Fix only the broken lines.
 
 ---
 
-## PHASE 4 — DEEP PATTERN REFERENCE
+## PHASE 4 — DEEP PATTERN REFERENCE (Domain Router)
 
-Load `references/bug-patterns.md` when:
-- Triage category identified but root cause not yet obvious
-- Bug is intermittent, async, or load-dependent
-- Bug involves state, caching, data flow across layers
-- The fix was applied but bug persists
+Load the reference file(s) matching the domain identified in Phase 2A.
+Always load ALL files relevant to the bug — never just one if multiple apply.
 
-The reference covers 10 categories and 35+ universal patterns,
-each with: symptom, why, how to prove, how to fix.
+| File | When to Load | Contents |
+|---|---|---|
+| `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing bug | Rendering, hydration, state, CSS, forms, WebSocket, PWA, browser compat |
+| `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
+| `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
+| `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
+
+Each reference file has: symptom → why → how to prove → how to fix.
+Load them. Read them. Match the pattern. Do not guess.
 
 ---
 
