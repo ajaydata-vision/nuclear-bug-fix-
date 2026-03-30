@@ -1,4 +1,4 @@
-# IN-015: Dead Letter Queue Full Causes New Messages To Be Rejected
+# IN-015: Dead Letter Queue Full With reject-publish Overflow Causes New Messages To Be Rejected
 
 ## User Prompt
 
@@ -9,17 +9,24 @@ Our message queue is backing up and publishers are being rejected. The main cons
 - stack: Node.js 20.11, amqplib 0.10, RabbitMQ 3.12
 - environment: production
 - logs:
-- new messages rejected with NACK from broker
-  - orders.dlq queue has x-max-length: 1000 and is at 1000 messages
+  - broker reports dead-letter publish rejected
+  - orders.dlq queue has x-max-length: 1000, x-overflow: reject-publish, and is at 1000 messages
   - messages failing validation are nacked to DLQ
-  - DLQ has been full for 3 days — never consumed
-  - main queue now backing up as publishers receive rejection
+  - DLQ has been full for 3 days and is never consumed
+  - main queue now backs up as dead-lettering failures accumulate
 - code excerpt:
 ```js
-// Consumer
+await channel.assertQueue('orders.dlq', {
+  durable: true,
+  arguments: {
+    'x-max-length': 1000,
+    'x-overflow': 'reject-publish'
+  }
+})
+
 channel.consume(mainQueue, (msg) => {
   if (!isValid(msg)) {
-    channel.nack(msg, false, false)  // sends to DLQ
+    channel.nack(msg, false, false)  // dead-letters to orders.dlq
     return
   }
   process(msg)
@@ -29,6 +36,6 @@ channel.consume(mainQueue, (msg) => {
 ```
 - reproduction:
 1. Invalid messages accumulate in DLQ
-2. DLQ reaches x-max-length limit (1000)
-3. New nacks rejected by broker (no space in DLQ)
+2. DLQ reaches x-max-length limit (1000) with overflow set to reject-publish
+3. New dead-letter attempts are rejected by the broker because the DLQ will not accept more messages
 4. Main queue backs up

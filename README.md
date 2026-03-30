@@ -41,20 +41,21 @@ It was born from real production debugging sessions where standard code review, 
 
 ## 📦 Skill Contents
 
-```
+```text
 nuclear-bug-fix/
-├── SKILL.md                              # Core methodology — 6 phases, 18 rules
-└── references/
-    ├── external-intelligence.md          # Docs, RFC, changelog, CVE, version lookup
-    ├── frontend-patterns.md              # 10 categories, 32 patterns
-    ├── backend-patterns.md               # 9 categories, 28 patterns
-    ├── integration-patterns.md           # 7 categories, 30 patterns
-    └── bug-patterns.md                   # 10 categories, 45 universal patterns
+├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
+├── references/                           # 8 reference files for patterns, DDx, and external intelligence
+├── benchmarks/                           # 100 benchmark cases plus suite metadata
+├── scripts/
+│   ├── update.sh                         # In-place skill updater
+│   └── build_skill.py                    # Deterministic packaging and validation
+└── dist/
+    └── nuclear-bug-fix.skill
 ```
 
-**Total: 36 categories · 135 patterns · 5 reference files · 1,900+ lines of methodology**
+**Current repo snapshot:** 8 reference files, 100 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
 
-Every pattern has 4 fields: **Symptom → Why → Prove it → Fix it**
+The reference files follow the same pattern language: **Symptom -> Why -> Prove -> Fix**
 
 ---
 
@@ -214,7 +215,9 @@ PHASE 6 — ESCALATION      If fix didn't work: 5-step escalation loop.
 
 ---
 
-## 🔑 The 18 Ironclad Rules
+## 🔑 Rule Highlights
+
+The full skill currently defines 35 rules in SKILL.md; the list below is the condensed README version.
 
 1. Fix only what is broken — never rewrite the whole file
 2. Never revisit closed paths — already tried = dead path
@@ -223,7 +226,7 @@ PHASE 6 — ESCALATION      If fix didn't work: 5-step escalation loop.
 5. Sentinel log in every fix — confirm the fix is actually running
 6. Never assume — every assumption gets a log or assertion
 7. Meta-check first — verify the debugging setup before the code
-8. Search before concluding — Phase 3.4 runs before forensic logs. Known bug = known fix
+8. Search before concluding — Phase 3.6 runs before forensic logs. Known bug = known fix
 9. Exact versions required — never accept "latest", they unlock known-bug detection
 10. Docs trump assumptions — if official docs say it works differently, the code is wrong
 11. RFC is ground truth for protocols — HTTP, OAuth, JWT, WebSocket, SMTP checked against spec
@@ -242,12 +245,12 @@ PHASE 6 — ESCALATION      If fix didn't work: 5-step escalation loop.
 | Test | Result |
 |---|---|
 | SKILL.md structure (6 phases) | ✅ Pass |
-| All phases have content | ✅ Pass |
-| Domain router present | ✅ Pass |
-| All critical keywords present | ✅ Pass |
-| All 135 patterns have 4 fields | ✅ Pass |
-| GitHub push | ✅ Pass |
-| Package validation | ✅ Pass |
+| Domain router + DDx gate present | ✅ Pass |
+| Reference files present (8) | ✅ Pass |
+| Benchmark cases present (100) | ✅ Pass |
+| Every case has prompt/evaluator/verify | ✅ Pass |
+| Deterministic artifact validation | ✅ Pass |
+| Packaged version stamping | ✅ Pass |
 
 ---
 
@@ -287,3 +290,4 @@ Methodology developed through real production debugging sessions at
   <a href="https://www.xgenplus.com">xgenplus.com</a> ·
   <a href="https://github.com/ajaydata-vision">github.com/ajaydata-vision</a>
 </p>
+

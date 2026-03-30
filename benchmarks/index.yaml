@@ -50,22 +50,28 @@ scoring:
     no_verification: -15
     revisits_disproven_path: -10
 
-required_case_fields:
-  - id
-  - title
-  - domain
-  - track
-  - difficulty
-  - determinism
-  - stack
-  - versions
-  - one_shot_eligible
-  - requires_external_intelligence
-  - requires_runtime_access
-  - requires_log_access
-  - root_cause
-  - accepted_fix
-  - verification
+required_case_information:
+  prompt_md:
+    - title
+    - stack
+    - versions
+    - reproduction
+  evaluator_md:
+    - id
+    - domain
+    - track
+    - difficulty
+    - determinism
+    - one_shot_eligible
+    - requires_external_intelligence
+    - requires_runtime_access
+    - requires_log_access
+    - root_cause
+    - accepted_fix
+  verify_md:
+    - before_fix
+    - after_fix
+    - regression_checks
 
 recommended_case_layout:
   - prompt.md

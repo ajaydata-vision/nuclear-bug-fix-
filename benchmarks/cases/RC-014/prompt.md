@@ -6,13 +6,13 @@ We get a React warning about setState on an unmounted component when users navig
 
 ## Context Provided To The Skill
 
-- stack: React 18.2, TypeScript 5.0
+- stack: React 17.0.2, TypeScript 5.0
 - environment: browser SPA
 - logs:
-- Warning: Can't perform a React state update on an unmounted component
+  - Warning: Can't perform a React state update on an unmounted component
   - occurs when navigating away from a page during a slow fetch
   - not reproducible on fast connections
-  - no visible crash — warning only, but memory leak confirmed in DevTools
+  - no visible crash; warning only, but memory leak confirmed in DevTools
 - code excerpt:
 ```jsx
 useEffect(() => {
