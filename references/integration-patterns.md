@@ -209,3 +209,40 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Why:** Non-deterministic logic in event handler (current time, random, external state). Event handler logic changed after events were stored. Events missing from log.
 **Prove:** Replay with fixed timestamp. Does it match? If yes → non-determinism is the cause.
 **Fix:** Event handlers must be pure functions of the event only. Never use current time or external state. Version event handler logic with event schema version.
+
+---
+
+## CATEGORY 8 — KUBERNETES HEALTH PROBE SEMANTICS
+
+### Pattern: Pod marked ready but requests fail for N seconds after start
+
+**Symptom:** Pod passes readiness check immediately. Requests fail for 20-30 seconds. Then healthy.
+**Why:** The readiness endpoint only checks if the HTTP server is listening — not whether Redis, PostgreSQL, or other dependencies are actually connected.
+**Prove:** Call the readiness endpoint manually right after pod starts. Does it return 200? Yes → probe definition is wrong, not the dependencies.
+**Fix:** Make the readiness endpoint actually verify dependency connectivity:
+
+```python
+# FastAPI / Python example
+@app.get("/health/ready")
+async def readiness():
+    # Check each dependency explicitly
+    try:
+        await redis_client.ping()          # not just "is redis client initialized"
+        await db.execute("SELECT 1")       # not just "is db object created"
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"ready": False, "error": str(e)})
+    return {"ready": True}
+```
+
+**Key distinction:**
+- `/health/live` (liveness): Is the process alive? Return 200 if not deadlocked/crashed.
+- `/health/ready` (readiness): Are ALL dependencies reachable? Only 200 when truly ready.
+
+**Common mistake:** Using the same endpoint for both, or having readiness only check HTTP server up.
+
+### Pattern: Kubernetes pod never becomes ready (readiness probe misconfigured)
+
+**Symptom:** Pod stuck in `0/1 READY`. `kubectl describe pod` shows readiness probe failing.
+**Why:** Probe path wrong, port wrong, initialDelaySeconds too short, or app genuinely failing.
+**Prove:** `kubectl exec -it <pod> -- curl localhost:<port>/health/ready` — does it return 200 from inside the pod?
+**Fix:** Fix the probe path/port, increase initialDelaySeconds, or fix the health endpoint.

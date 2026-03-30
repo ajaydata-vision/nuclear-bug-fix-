@@ -23,7 +23,6 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Symptom:** Works on server, breaks on client. Console error: "hydration mismatch" or "content did not match."
 **Why:** Server renders different HTML than client. Usually: Date.now(), Math.random(), browser-only APIs, user-specific data, or non-deterministic rendering.
 **Prove:** Compare server-rendered HTML with client HTML. They will differ at a specific node.
-**Fix:** Ensure server and client produce identical output. Defer browser-only code to after hydration. Use `suppressHydrationWarning` only as last resort.
 
 ### Pattern: Infinite render loop
 **Symptom:** Browser tab freezes. CPU spikes. "Maximum update depth exceeded" error.
@@ -274,3 +273,49 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Why:** Memory leak. Large images not released. Too many components mounted. Redux store growing unbounded.
 **Prove:** Xcode Memory Graph (iOS). Android Memory Profiler. Watch memory usage as you navigate.
 **Fix:** Unmount unused components. Compress images. Paginate lists (FlatList, not ScrollView with all items). Clear old data from store.
+
+---
+
+## CATEGORY 12 — SERVICE WORKER vs CDN DISAMBIGUATION
+
+### Pattern: Stale assets after deploy — is it CDN or Service Worker?
+
+This disambiguation is critical because the fix is completely different.
+
+**Signal: Hard refresh (Ctrl+Shift+R) fixes it for that user**
+→ SERVICE WORKER. Hard refresh bypasses the SW cache.
+→ CDN would still serve stale to the same user after hard refresh if TTL not expired.
+
+**Signal: Bypass the CDN (direct origin URL) also shows stale**
+→ SERVICE WORKER or browser cache. Not CDN.
+
+**Signal: Bypass CDN shows fresh, CDN shows stale**
+→ CDN cache. Not service worker.
+
+**Signal: Only some users affected, others see fresh content immediately**
+→ CDN edge node cache (geographic). Not service worker (which is per-device).
+
+**Service Worker Fix:**
+```javascript
+// In sw.js: version the cache name so old SW activates new cache on update
+const CACHE_VERSION = 'v2'; // increment on every deploy
+const CACHE_NAME = `app-cache-${CACHE_VERSION}`;
+
+// In activate event: delete old caches
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
+  );
+});
+```
+
+**CDN Fix:**
+Use content-hashed asset filenames (`app.abc123.js`) so the URL changes on deploy.
+Or: issue a CDN purge/invalidation as part of the deploy pipeline.
+
+**How to confirm SW is the culprit:**
+Open DevTools → Application → Service Workers.
+If a service worker is registered and active, check its cache in Cache Storage.
+If old assets appear in Cache Storage after deploy → SW cache is not being invalidated.
