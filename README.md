@@ -375,16 +375,16 @@ If this skill saves your team hours of debugging, a ⭐ on the repo would be app
 ---
 
 ## 🙏 Acknowledgements
-
-Built with [Claude Code](https://claude.ai/code) by Anthropic.  
-Methodology developed through real production debugging sessions at  
-[Data Ingenious Technologies](https://www.dataingenious.com).
+ 
+Methodology developed through real production debugging experience
+of Software Developers in various IT companies and highly technical team at
+[Data Ingenious Technologies](https://www.data.in).
 
 ---
 
 <p align="center">
   <strong>Created by Dr. Ajay Data · Data Ingenious Technologies · Jaipur, India</strong><br/>
-  <a href="https://www.dataingenious.com">dataingenious.com</a> ·
+  <a href="https://www.data.in">dataingeniou</a> ·
   <a href="https://www.xgenplus.com">xgenplus.com</a> ·
   <a href="https://github.com/ajaydata-vision">github.com/ajaydata-vision</a>
 </p>
