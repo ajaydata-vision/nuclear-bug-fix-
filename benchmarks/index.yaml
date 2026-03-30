@@ -1,0 +1,96 @@
+suite:
+  name: nuclear-bug-fix-benchmarks
+  version: 1
+  purpose: Measure first-shot bug-fix accuracy, false-positive rate, and verification quality.
+
+tracks:
+  - id: bohrbug-core
+    description: Deterministic, reproducible, one-primary-cause bugs.
+    target_cases: 40
+  - id: regression-version
+    description: Dependency, browser, runtime, or documented behavior change regressions.
+    target_cases: 20
+  - id: deploy-env
+    description: Wrong code running, stale assets, env drift, config mismatch, partial rollout.
+    target_cases: 20
+  - id: intermittent-race
+    description: Timing, concurrency, startup, flaky test, and load-amplified failures.
+    target_cases: 20
+  - id: distributed-multi-factor
+    description: Queues, webhooks, gateways, sagas, replica lag, and multi-service interactions.
+    target_cases: 20
+  - id: evidence-limited
+    description: Only logs, partial code, symptom text, or stack trace available.
+    target_cases: 20
+
+domains:
+  - id: frontend
+    target_cases: 30
+  - id: backend
+    target_cases: 30
+  - id: integration
+    target_cases: 30
+  - id: mobile
+    target_cases: 20
+  - id: general
+    target_cases: 25
+  - id: version-external-intelligence
+    target_cases: 20
+
+scoring:
+  first_shot_resolution: 40
+  root_cause_accuracy: 25
+  fix_accuracy: 20
+  verification_quality: 10
+  evidence_discipline: 5
+  penalties:
+    confident_wrong_answer: -40
+    root_cause_mismatch: -25
+    shotgun_rewrite: -20
+    no_verification: -15
+    revisits_disproven_path: -10
+
+required_case_fields:
+  - id
+  - title
+  - domain
+  - track
+  - difficulty
+  - determinism
+  - stack
+  - versions
+  - one_shot_eligible
+  - requires_external_intelligence
+  - requires_runtime_access
+  - requires_log_access
+  - root_cause
+  - accepted_fix
+  - verification
+
+recommended_case_layout:
+  - prompt.md
+  - evaluator.md
+  - verify.md
+  - assets/
+
+starter_backlog_ids:
+  - FE-001
+  - FE-008
+  - FE-019
+  - BE-003
+  - BE-009
+  - BE-020
+  - IN-002
+  - IN-009
+  - IN-017
+  - MO-001
+  - MO-005
+  - RC-001
+  - RC-002
+  - RC-008
+  - RC-018
+  - VE-003
+  - VE-006
+  - DE-001
+  - DE-002
+  - DE-006
