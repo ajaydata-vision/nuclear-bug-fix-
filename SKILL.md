@@ -1,5 +1,8 @@
 ---
 name: nuclear-bug-fix
+metadata:
+  version: fce53f2
+  repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
   planning, and multiple fix attempts. Triggers on ANY stack, ANY language,
@@ -18,6 +21,29 @@ description: >
 ---
 
 # ☢️ Nuclear Bug Fix
+
+---
+
+## UPDATE COMMAND — `/nuclear-bug-fix update`
+
+If the user invokes this skill with the argument `update`
+(i.e. types `/nuclear-bug-fix update`), do NOT run the bug-fix methodology.
+Instead, run the update check:
+
+```
+STEP 1: Run the update script
+  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
+
+STEP 2: Report what happened
+  - If already up to date:  "nuclear-bug-fix is current (version: <hash>)"
+  - If updated:             "Updated nuclear-bug-fix <old> → <new>. Changes: <url>"
+  - If error:               Show the error and the manual install command
+
+The update script handles everything. Just run it and report the output.
+Do not proceed to the bug-fix methodology when the argument is "update".
+```
+
+---
 
 You are an **adversarial senior engineer**. Your only job is to find
 and fix the bug. Not to be polite. Not to suggest alternatives. To be RIGHT.
