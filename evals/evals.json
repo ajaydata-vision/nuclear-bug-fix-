@@ -89,6 +89,77 @@
         "Skill asks multiple intake questions in a single organized message (not scattered)",
         "Response is structured and methodical, not a generic 'tell me more' reply"
       ]
+    },
+    {
+      "id": 6,
+      "eval_name": "ddx-resist-timezone-auth",
+      "description": "DDx resistance: user says auth service has a bug. Real cause is JWT exp claim generated in wrong timezone. Skill must resist blaming auth service.",
+      "prompt": "Our auth service is randomly rejecting tokens as expired even though they were just issued. It happens to about 30% of users but not others. I've read the auth service code and the JWT validation logic looks correct. We think there's a bug in the auth service's token validation — maybe it's checking expiry wrong under certain conditions. Stack: Node.js 20, Express, jsonwebtoken 9.0, Redis for session store, servers in UTC+5:30 timezone. The tokens that fail were issued within the last 5 minutes. The exp claim is set to 'now + 1 hour'. This started happening after we moved our token generation service to a new server last week.",
+      "expectations": [
+        "Skill does NOT conclude the auth service validation logic is the root cause",
+        "Skill identifies the new server's timezone as a key signal (started after server move)",
+        "Skill checks how 'now' is computed in the exp claim — local time vs UTC",
+        "Skill identifies that UTC+5:30 servers generating exp as local 'now + 1hr' produce tokens that expire 5.5 hours earlier than intended in UTC",
+        "Skill generates DDx Gate with auth service bug as a competing hypothesis (CH) that gets eliminated",
+        "Skill eliminates auth service CH because: tokens issued on OLD server still work; only tokens from new server fail",
+        "Verdict: exp claim computed in local timezone instead of UTC — fix is Date.now() or new Date().toISOString() not local time",
+        "Skill does NOT suggest 'check JWT library version' as the primary fix",
+        "Skill does NOT suggest 'increase token TTL' as the fix"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "ddx-resist-memory-config-not-code",
+      "description": "DDx resistance: user has already audited code and concluded it must be a code memory leak. Real cause is logging/APM configuration buffering payloads. Skill must reopen the config path the user closed.",
+      "prompt": "Our Node.js production server crashes every 3-4 days with out-of-memory. Memory grows continuously from 200MB at startup to 4GB at crash. I've done a thorough code audit — all event listeners are cleaned up in useEffect returns, no circular references, no global arrays being appended to, WeakMap used for caches. I've run the Node.js heap profiler in staging and found nothing obvious. It must be a subtle memory leak in our code that I'm missing. Stack: Node.js 20, Express, Datadog APM agent v4.2 (added 4 days ago), Winston logger with custom transport.",
+      "expectations": [
+        "Skill does NOT immediately accept the user's conclusion that it is a code memory leak",
+        "Skill invokes Phase 2F meta-check: verify the debugging setup — is the heap profiler showing the full picture?",
+        "Skill notices the Datadog APM agent was added 4 days ago — correlates with crash frequency of 3-4 days",
+        "Skill identifies the APM agent or custom Winston transport as a candidate for buffering data",
+        "Skill generates DDx Gate with 'subtle code leak' as CH-1 and 'third-party agent/transport buffering' as PH",
+        "Skill eliminates code leak CH because: user has audited code AND heap profiler in staging shows nothing — staging may not have the same APM config",
+        "Skill recommends: check Datadog APM agent configuration for payload capture settings; check Winston transport buffer limits",
+        "Skill does NOT suggest writing more heap profiling code as the primary next step",
+        "Skill does NOT suggest increasing server memory as the fix",
+        "Confidence score is MEDIUM or explicitly notes the agent correlation as the strongest signal"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "ddx-resist-test-pollution-not-race",
+      "description": "DDx resistance: user has already concluded it is a race condition in async code. Real cause is test state pollution from another test. Skill must resist the user's pre-diagnosis.",
+      "prompt": "We have a flaky async test that fails about 25% of the time in CI but always passes locally and when run in isolation. The test checks that a user's email is unique in the database. We've looked at the async code and we're sure it's a race condition — the uniqueness check and the insert must be racing. We need help finding the exact race window. Stack: Node.js 20, Jest 29, PostgreSQL 16, the test suite runs in random order. The test has been stable for 6 months. It started failing 2 weeks ago when we added 15 new tests.",
+      "expectations": [
+        "Skill does NOT immediately help find the 'race window' the user asked about",
+        "Skill flags that the test passes in isolation — this is the single most diagnostic signal",
+        "Skill identifies that test ordering is random AND the failure started when new tests were added — strong signal for test pollution",
+        "Skill generates DDx Gate with 'race condition in uniqueness check code' as CH-1 and 'test state pollution' as PH",
+        "Skill eliminates race condition CH because: passes in isolation; random ordering correlates with failure; no code changes in the last 2 weeks",
+        "Skill recommends: run the failing test with --runInBand to check if ordering matters; identify which of the 15 new tests creates a user record without cleanup",
+        "Skill identifies that the 25% failure rate likely matches how often the polluting test runs before the failing test",
+        "Skill does NOT suggest adding retry logic to the test",
+        "Skill does NOT suggest using a database transaction in the application code as the fix",
+        "Skill does NOT accept the user's framing that finding 'the race window' is the correct next step"
+      ]
+    },
+    {
+      "id": 9,
+      "eval_name": "ddx-resist-migration-not-wrong-deploy",
+      "description": "DDx resistance: user says wrong code was deployed or cache is stale. Real cause is a database migration that was merged but not applied. Skill must check the plug (Phase 3.0) before accepting deploy blame.",
+      "prompt": "We just deployed version 2.4.1 and our checkout feature is completely broken — users get a 500 error when they try to complete a purchase. All other features work fine. The CI/CD pipeline showed green. We think either the wrong code was deployed or there's a cached version of the old bundle being served. We've tried hard-refreshing and clearing CDN cache — still broken. Stack: Node.js 20, Express, Prisma 5.9, PostgreSQL 16. Logs show: PrismaClientKnownRequestError: Invalid column 'discount_code' on model 'Order'. The checkout feature was updated in this release to support discount codes.",
+      "expectations": [
+        "Skill immediately reads the log error: PrismaClientKnownRequestError: Invalid column 'discount_code'",
+        "Skill does NOT investigate CDN cache or wrong bundle as the primary path",
+        "Skill does NOT investigate CI/CD pipeline configuration as the primary path",
+        "Skill identifies the error as a schema mismatch — the code references a column that does not exist in the database",
+        "Skill generates DDx Gate with 'wrong code deployed / stale cache' as CH-1 and 'migration not applied' as PH",
+        "Skill eliminates wrong-deploy CH because: the error message explicitly names a missing DB column that corresponds to the new discount_code feature — a wrong deploy would not produce this specific error",
+        "Skill checks: was the Prisma migration for discount_code included in the deploy script?",
+        "Verdict: database migration adding discount_code column was merged but not applied to production",
+        "Fix: run npx prisma migrate deploy against production database",
+        "Skill notes the permanent fix: add migration step to the deploy pipeline before app restart"
+      ]
     }
   ]
 }
