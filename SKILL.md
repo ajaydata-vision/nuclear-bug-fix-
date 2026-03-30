@@ -231,7 +231,7 @@ BOHRBUG  — Deterministic. Reproducible. Same input → same failure.
 HEISENBUG — Disappears or changes when observed/debugged.
             Cause: Race condition, timing, debugger alters execution,
                    uninitialized variable, optimizer changes behavior.
-            Strategy: Load references/intermittent-race-bugs.md.
+            Strategy: In Phase 4, load references/intermittent-race-bugs.md.
               No breakpoints. Find the uncontrolled variable.
               Amplify race window. Non-invasive logging. TSan.
             Sign: "It disappears when I try to debug it"
@@ -568,6 +568,8 @@ log("[DEBUG] ★★★ FIXED CODE EXECUTING v2 ★★★")
 
 ### 3.9 — DIFFERENTIAL DIAGNOSIS GATE (Mandatory Before Verdict)
 
+> **Stuck before reaching this step?** If 2+ hours have passed with no clear hypothesis, jump directly to **3.13 — GET A FRESH VIEW** before running the gate.
+
 **This gate exists to prevent the most common failure in debugging: issuing a verdict
 that the evidence is consistent with, but does not uniquely prove.**
 
@@ -799,7 +801,7 @@ The 5 Whys root cause identifies what to fix so it never happens again.
 BOTH fixes should be provided.
 ```
 
-### 3.12 — CHANGE ONE THING AT A TIME
+### 3.12 — CHANGE ONE THING AT A TIME *(apply when implementing any fix at 3.10 or during Phase 6 escalation)*
 
 When applying fixes — especially during escalation:
 ```
@@ -923,7 +925,7 @@ CASE A: First bug is fixed. New symptom is different from original.
 CASE B: Same symptom persists. Verdict was MEDIUM confidence.
   → Return to the DDx Gate (3.9). The uneliminated competing
     hypothesis is now the primary suspect.
-  → Collect the evidence specified in Step 5 of the gate.
+  → Collect the evidence specified in DDx Gate Step 5 (Evidence Collection Plan).
   → Re-run the gate with the new evidence.
   → Issue a new verdict if the gate passes.
 ```
