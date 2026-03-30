@@ -14,11 +14,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME = "nuclear-bug-fix"
 ARCHIVE_PREFIX = f"{SKILL_NAME}/"
 ALLOWED_ROOTS = (
-    "SKILL.md",
-    "README.md",
     "scripts/",
     "references/",
     "benchmarks/",
+)
+ALLOWED_EXACT_FILES = (
+    "SKILL.md",
+    "README.md",
+    "setup",
+    "setup.ps1",
 )
 FORBIDDEN_PREFIXES = (
     ".git/",
@@ -31,9 +35,9 @@ SOURCE_COMMIT_PATTERN = re.compile(r"(^\s{1,4}source_commit:\s*)\S+", re.MULTILI
 DEFAULT_RELEASE_ARTIFACT = f"dist/{SKILL_NAME}.skill"
 
 
-def git_tracked_files() -> list[Path]:
+def git_repo_files() -> list[Path]:
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+        ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         check=True,
     )
@@ -45,10 +49,17 @@ def is_env_path(rel_path: str) -> bool:
     return any(part == ".env" or part.startswith(".env.") for part in parts)
 
 
-def is_allowed_path(rel_path: str) -> bool:
-    if rel_path == "SKILL.md" or rel_path == "README.md":
+def is_generated_path(rel_path: str) -> bool:
+    path = Path(rel_path)
+    if any(part == "__pycache__" for part in path.parts):
         return True
-    return any(rel_path.startswith(root) for root in ALLOWED_ROOTS[2:])
+    return path.suffix in {".pyc", ".pyo"}
+
+
+def is_allowed_path(rel_path: str) -> bool:
+    if rel_path in ALLOWED_EXACT_FILES:
+        return True
+    return any(rel_path.startswith(root) for root in ALLOWED_ROOTS)
 
 
 def is_forbidden_path(rel_path: str) -> bool:
@@ -56,7 +67,7 @@ def is_forbidden_path(rel_path: str) -> bool:
         return True
     if rel_path == ".gitignore":
         return True
-    return is_env_path(rel_path)
+    return is_env_path(rel_path) or is_generated_path(rel_path)
 
 
 def should_package(rel_path: str) -> bool:
@@ -193,7 +204,7 @@ def load_release_manifest(manifest_path: Path) -> dict[str, str]:
 
 def build_archive(output_path: Path, version: str | None, source_commit: str | None) -> None:
     tracked_files = []
-    for rel_path in sorted(path.as_posix() for path in git_tracked_files()):
+    for rel_path in sorted(path.as_posix() for path in git_repo_files()):
         if should_package(rel_path):
             tracked_files.append(rel_path)
 
@@ -307,7 +318,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stamp_parser.add_argument("--version", required=True, help="Version string to stamp into SKILL.md")
     stamp_parser.add_argument("--source-commit", help="Exact source commit to stamp into SKILL.md")
 
-    build_parser = subparsers.add_parser("build", help="Build the .skill archive from tracked files")
+    build_parser = subparsers.add_parser(
+        "build",
+        help="Build the .skill archive from repo files (tracked plus non-ignored additions)",
+    )
     build_parser.add_argument("--output", required=True, type=Path, help="Archive output path")
     build_parser.add_argument("--version", help="Version string to stamp into the packaged SKILL.md")
     build_parser.add_argument("--source-commit", help="Source commit to stamp into the packaged SKILL.md")

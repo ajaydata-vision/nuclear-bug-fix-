@@ -7,11 +7,22 @@ set -euo pipefail
 REPO_OWNER="ajaydata-vision"
 REPO_NAME="nuclear-bug-fix-"
 SKILL_NAME="nuclear-bug-fix"
-SKILLS_DIR="${HOME}/.claude/skills/${SKILL_NAME}"
-SKILL_MD="${SKILLS_DIR}/SKILL.md"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF_SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PERSONAL_SKILL_DIR="${HOME}/.claude/skills/${SKILL_NAME}"
+PROJECT_SKILL_DIR=".claude/skills/${SKILL_NAME}"
 DEFAULT_ARTIFACT="dist/${SKILL_NAME}.skill"
 RELEASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/dist/release.json"
 COMPARE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/compare"
+INSTALL_SH_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.sh"
+INSTALL_PS1_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.ps1"
+
+print_manual_reinstall() {
+  echo "   Reinstall:"
+  echo "     macOS/Linux personal: curl -fsSL ${INSTALL_SH_URL} | bash"
+  echo "     macOS/Linux project:  curl -fsSL ${INSTALL_SH_URL} | bash -s -- --project"
+  echo "     Windows PowerShell:   irm ${INSTALL_PS1_URL} | iex"
+}
 
 read_skill_metadata_field() {
   local file="$1"
@@ -20,17 +31,28 @@ read_skill_metadata_field() {
     | head -1 | awk '{print $2}' | tr -d '"' | tr -d "'"
 }
 
-# ── 1. Read installed version from metadata block in SKILL.md ────────────────
-# Check personal install first, then project install
+# ── 1. Locate installed skill directory and read version metadata ─────────────
 installed_version=""
 installed_source_commit=""
-PROJECT_SKILL_MD=".claude/skills/${SKILL_NAME}/SKILL.md"
-if [[ -f "$SKILL_MD" ]]; then
-  installed_version=$(read_skill_metadata_field "$SKILL_MD" "version")
-  installed_source_commit=$(read_skill_metadata_field "$SKILL_MD" "source_commit")
-elif [[ -f "$PROJECT_SKILL_MD" ]]; then
-  installed_version=$(read_skill_metadata_field "$PROJECT_SKILL_MD" "version")
-  installed_source_commit=$(read_skill_metadata_field "$PROJECT_SKILL_MD" "source_commit")
+TARGET_DIR=""
+TARGET_SKILL_MD=""
+
+if [[ -f "${SELF_SKILL_DIR}/SKILL.md" ]] \
+  && [[ "$(basename "${SELF_SKILL_DIR}")" == "${SKILL_NAME}" ]] \
+  && [[ "$(basename "$(dirname "${SELF_SKILL_DIR}")")" == "skills" ]]; then
+  TARGET_DIR="${SELF_SKILL_DIR}"
+  TARGET_SKILL_MD="${SELF_SKILL_DIR}/SKILL.md"
+elif [[ -f "${PERSONAL_SKILL_DIR}/SKILL.md" ]]; then
+  TARGET_DIR="${PERSONAL_SKILL_DIR}"
+  TARGET_SKILL_MD="${PERSONAL_SKILL_DIR}/SKILL.md"
+elif [[ -f "${PROJECT_SKILL_DIR}/SKILL.md" ]]; then
+  TARGET_DIR="${PROJECT_SKILL_DIR}"
+  TARGET_SKILL_MD="${PROJECT_SKILL_DIR}/SKILL.md"
+fi
+
+if [[ -n "${TARGET_SKILL_MD}" ]]; then
+  installed_version=$(read_skill_metadata_field "${TARGET_SKILL_MD}" "version")
+  installed_source_commit=$(read_skill_metadata_field "${TARGET_SKILL_MD}" "source_commit")
 fi
 
 [[ -z "$installed_version" ]] && installed_version="unknown"
@@ -38,6 +60,7 @@ fi
 
 echo "nuclear-bug-fix updater"
 echo "  Installed : ${installed_version}"
+[[ -n "${TARGET_DIR}" ]] && echo "  Location  : ${TARGET_DIR}"
 
 # ── 2. Fetch latest released version from GitHub ─────────────────────────────
 echo "  Checking  : GitHub release manifest..."
@@ -47,17 +70,14 @@ release_response=$(curl -sf \
   "${RELEASE_URL}") || {
   echo ""
   echo "❌ Could not fetch dist/release.json from GitHub."
-  echo "   Manual install:"
-  echo "     curl -L https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${DEFAULT_ARTIFACT} -o /tmp/${SKILL_NAME}.skill"
-  echo "     claude skills add /tmp/${SKILL_NAME}.skill --force"
+  print_manual_reinstall
   exit 1
 }
 
 if ! command -v python3 &>/dev/null; then
   echo "❌ python3 is required to parse dist/release.json but was not found in PATH."
-  echo "   Install python3 or use the manual install command:"
-  echo "     curl -L https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${DEFAULT_ARTIFACT} -o /tmp/${SKILL_NAME}.skill"
-  echo "     claude skills add /tmp/${SKILL_NAME}.skill --force"
+  echo "   Install python3 or reinstall with:"
+  print_manual_reinstall
   exit 1
 fi
 
@@ -154,19 +174,26 @@ if [[ -z "$downloaded_source_commit" || "$downloaded_source_commit" != "$latest_
   rm -f "${TMP}"; exit 1
 fi
 
-# ── 6. Install ────────────────────────────────────────────────────────────────
-echo "   Installing..."
-if command -v claude &>/dev/null; then
-  claude skills add "${TMP}" --force
-  echo ""
-  echo "✅ Updated: ${installed_version} → ${latest_version}"
-  echo "   Restart Claude Code for the new version to take effect."
-else
-  mkdir -p "$(dirname "${SKILLS_DIR}")"
-  cp "${TMP}" "${SKILLS_DIR}/../${SKILL_NAME}.skill"
-  echo ""
-  echo "⚠️  claude CLI not in PATH. Saved to:"
-  echo "   ${SKILLS_DIR}/../${SKILL_NAME}.skill"
-  echo "   Run: claude skills add ${SKILLS_DIR}/../${SKILL_NAME}.skill --force"
+# ── 6. Install into the existing skill directory ──────────────────────────────
+if [[ -z "${TARGET_DIR}" ]]; then
+  TARGET_DIR="${PERSONAL_SKILL_DIR}"
 fi
+
+echo "   Installing into ${TARGET_DIR}..."
+
+if [[ ! -f "${SCRIPT_DIR}/install.py" ]]; then
+  echo "❌ Missing installer helper: ${SCRIPT_DIR}/install.py"
+  print_manual_reinstall
+  rm -f "${TMP}"; exit 1
+fi
+
+python3 "${SCRIPT_DIR}/install.py" --from-archive "${TMP}" --install-dir "${TARGET_DIR}" >/dev/null || {
+  echo "❌ Failed to install the downloaded update."
+  print_manual_reinstall
+  rm -f "${TMP}"; exit 1
+}
+
+echo ""
+echo "✅ Updated: ${installed_version} → ${latest_version}"
+echo "   Restart Claude Code for the new version to take effect."
 rm -f "${TMP}"

@@ -37,13 +37,14 @@ STEP 1: Locate the update script (check both install locations)
   Project install:   bash .claude/skills/nuclear-bug-fix/scripts/update.sh
 
   Try personal first. If the file does not exist, try project.
-  If neither exists: the skill was not installed from a directory; use manual update.
+  If neither exists: the skill was not installed from a directory; use manual reinstall.
 
 STEP 2: Report what happened
   - If already up to date:  "nuclear-bug-fix is current (version: <version>)"
   - If updated:             "Updated nuclear-bug-fix <old> → <new>. Changes: <url>"
-  - If error:               Show the error and the manual install command:
-                            curl -L https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/dist/nuclear-bug-fix.skill -o /tmp/nuclear-bug-fix.skill && claude skills add /tmp/nuclear-bug-fix.skill --force
+  - If error:               Show the error and the reinstall commands:
+                            macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.sh | bash
+                            Windows PS:   irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.ps1 | iex
 
 The update script handles everything. Just run it and report the output.
 Do not proceed to the bug-fix methodology when the argument is "update".

@@ -46,13 +46,18 @@ nuclear-bug-fix/
 ├── VERSION                               # Current release version (1.1)
 ├── CHANGELOG.md                          # 1.1 release notes and 1.2 unreleased bucket
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
+├── setup                                 # Root setup entrypoint for git-cloned installs
+├── setup.ps1                             # Root PowerShell setup entrypoint
 ├── references/                           # 8 reference files for patterns, DDx, and external intelligence
 ├── benchmarks/                           # 100 benchmark cases plus suite metadata
 ├── scripts/
-│   ├── update.sh                         # In-place skill updater
+│   ├── install.py                        # Local repo installer into Claude's skills directory
+│   ├── install.sh                        # One-line installer for macOS/Linux
+│   ├── install.ps1                       # One-line installer for Windows PowerShell
+│   ├── update.sh                         # In-place skill updater for installed skill directories
 │   └── build_skill.py                    # Deterministic packaging, release manifest, and validation
 └── dist/
-    ├── nuclear-bug-fix.skill
+    ├── nuclear-bug-fix.skill             # Packaged release artifact for shipped updates and validation
     └── release.json                      # Single source of truth for released version metadata
 ```
 
@@ -149,22 +154,83 @@ exhaustion, off-by-one errors, mutation during iteration
 
 ## 🚀 Installation
 
-### Step 1 — Download the skill file
-Download `nuclear-bug-fix.skill` from the [Releases](https://github.com/ajaydata-vision/nuclear-bug-fix-/releases) page  
-or directly from [`dist/nuclear-bug-fix.skill`](https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/dist/nuclear-bug-fix.skill).
+Claude Code discovers skills from directories, not from a special import command:
 
-### Step 2 — Install in Claude Code
+- Personal skills: `~/.claude/skills/`
+- Project skills: `.claude/skills/`
+
+### Git install
+
+Personal install:
 ```bash
-claude skills add /path/to/nuclear-bug-fix.skill
+git clone --single-branch --depth 1 https://github.com/ajaydata-vision/nuclear-bug-fix- ~/.claude/skills/nuclear-bug-fix
+cd ~/.claude/skills/nuclear-bug-fix
+./setup
 ```
 
-### Step 3 — Verify installation
+Project install:
 ```bash
-claude skills list
-# nuclear-bug-fix should appear in the list
+git clone --single-branch --depth 1 https://github.com/ajaydata-vision/nuclear-bug-fix- .claude/skills/nuclear-bug-fix
+cd .claude/skills/nuclear-bug-fix
+./setup
 ```
 
-That's it. The skill activates **automatically** — no special command needed.
+Windows PowerShell from a git clone:
+```powershell
+git clone --single-branch --depth 1 https://github.com/ajaydata-vision/nuclear-bug-fix- $HOME\.claude\skills\nuclear-bug-fix
+Set-Location $HOME\.claude\skills\nuclear-bug-fix
+.\setup.ps1
+```
+
+### Script install
+
+macOS / Linux personal install:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.sh | bash
+```
+
+macOS / Linux project install:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.sh | bash -s -- --project
+```
+
+Windows PowerShell personal install:
+```powershell
+irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.ps1 | iex
+```
+
+Windows PowerShell project install:
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.ps1))) -Project
+```
+
+### Install from an existing clone
+
+Personal install:
+```bash
+python3 scripts/install.py
+```
+
+Project install:
+```bash
+python3 scripts/install.py --scope project
+```
+
+### Verify installation
+
+Check that the skill directory exists:
+```bash
+ls ~/.claude/skills/nuclear-bug-fix
+# or
+ls .claude/skills/nuclear-bug-fix
+```
+
+Then restart Claude Code and ask:
+```text
+What skills are available?
+```
+
+The `setup` and `setup.ps1` entrypoints make the git-clone flow work like other Claude Code skill packs: clone into the skill directory, run setup once, and restart Claude Code. The `dist/nuclear-bug-fix.skill` file is still shipped as a packaged release artifact for updates and release validation.
 
 ---
 
