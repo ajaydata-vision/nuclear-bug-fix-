@@ -43,8 +43,8 @@ It was born from real production debugging sessions where standard code review, 
 
 ```text
 nuclear-bug-fix/
-├── VERSION                               # Current release version (1.2)
-├── CHANGELOG.md                          # 1.2 release notes and 1.3 unreleased bucket
+├── VERSION                               # Current release version (1.3)
+├── CHANGELOG.md                          # 1.3 release notes and 1.4 unreleased bucket
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
 ├── setup                                 # Root setup entrypoint for git-cloned installs
 ├── setup.ps1                             # Root PowerShell setup entrypoint
@@ -54,7 +54,8 @@ nuclear-bug-fix/
 │   ├── install.py                        # Local repo installer into Claude's skills directory
 │   ├── install.sh                        # One-line installer for macOS/Linux
 │   ├── install.ps1                       # One-line installer for Windows PowerShell
-│   ├── update.sh                         # In-place skill updater for installed skill directories
+│   ├── update.sh                         # Bash updater for installed skill directories
+│   ├── update.ps1                        # PowerShell updater for installed skill directories
 │   └── build_skill.py                    # Deterministic packaging, release manifest, and validation
 └── dist/
     ├── nuclear-bug-fix.skill             # Packaged release artifact for shipped updates and validation
@@ -62,8 +63,8 @@ nuclear-bug-fix/
 ```
 
 **Current repo snapshot:** 8 reference files, 100 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
-**Current release:** `1.2`  
-**Next change bucket:** `1.3`
+**Current release:** `1.3`  
+**Next change bucket:** `1.4`
 
 The reference files follow the same pattern language: **Symptom -> Why -> Prove -> Fix**
 
@@ -239,6 +240,24 @@ What skills are available?
 
 The `setup` and `setup.ps1` entrypoints make the git-clone flow work like other Claude Code skill packs: clone into the skill directory, run setup once, and restart Claude Code. The `dist/nuclear-bug-fix.skill` file is still shipped as a packaged release artifact for updates and release validation.
 
+### Update an installed skill
+
+Bash / Git Bash / WSL:
+```bash
+bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
+# or, from a project root
+bash .claude/skills/nuclear-bug-fix/scripts/update.sh
+```
+
+Windows PowerShell:
+```powershell
+& "$HOME\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
+# or, from a project root
+& ".\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
+```
+
+Maintainer note: when the update flow changes, keep `scripts/update.sh` and `scripts/update.ps1` behavior in sync.
+
 ---
 
 ## 💬 How to Use
@@ -327,7 +346,7 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 | Reference files present (8) | ✅ Pass |
 | Benchmark cases present (100) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
-| Semantic release version (`1.2`) | ✅ Pass |
+| Semantic release version (`1.3`) | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
 | Release manifest ↔ packaged version alignment | ✅ Pass |
 

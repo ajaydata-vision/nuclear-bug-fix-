@@ -57,6 +57,15 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+to_python_path() {
+  local path="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
 if [[ -n "$install_dir" ]]; then
   target_dir="$install_dir"
 elif [[ "$scope" == "project" ]]; then
@@ -71,7 +80,7 @@ trap 'rm -f "$tmp_file"' EXIT
 echo "Downloading ${SOURCE_ARCHIVE_URL}"
 curl -fsSL "${SOURCE_ARCHIVE_URL}" -o "${tmp_file}"
 
-python3 - "${tmp_file}" "${target_dir}" <<'PY'
+python3 - "$(to_python_path "${tmp_file}")" "$(to_python_path "${target_dir}")" <<'PY'
 import shutil
 import sys
 import tempfile

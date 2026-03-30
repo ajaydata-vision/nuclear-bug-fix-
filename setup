@@ -57,6 +57,15 @@ if [[ ! -f "${REPO_ROOT}/SKILL.md" ]]; then
   exit 1
 fi
 
+to_python_path() {
+  local path="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
 python_bin=""
 if command -v python3 >/dev/null 2>&1; then
   python_bin="python3"
@@ -67,11 +76,22 @@ else
   exit 1
 fi
 
-current_dir="$(cd "${REPO_ROOT}" && pwd -P)"
+shell_realpath() {
+  local path="$1"
+  local resolved
+  resolved="$("${python_bin}" -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$(to_python_path "$path")")"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$resolved"
+  else
+    printf '%s\n' "$resolved"
+  fi
+}
+
+current_dir="$(shell_realpath "${REPO_ROOT}")"
 current_name="$(basename "${current_dir}")"
 parent_name="$(basename "$(dirname "${current_dir}")")"
-invocation_dir="$(pwd -P)"
-personal_target="$("${python_bin}" -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${HOME}/.claude/skills/${SKILL_NAME}")"
+invocation_dir="$(shell_realpath ".")"
+personal_target="$(shell_realpath "${HOME}/.claude/skills/${SKILL_NAME}")"
 current_is_installed="false"
 if [[ "${current_name}" == "${SKILL_NAME}" ]] && [[ "${parent_name}" == "skills" ]]; then
   current_is_installed="true"
@@ -79,7 +99,7 @@ fi
 
 requested_target=""
 if [[ -n "${install_dir}" ]]; then
-  requested_target="$("${python_bin}" -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${install_dir}")"
+  requested_target="$(shell_realpath "${install_dir}")"
 elif [[ "${scope_mode}" == "auto" ]]; then
   if [[ "${current_is_installed}" == "true" ]]; then
     requested_target="${current_dir}"
@@ -98,7 +118,7 @@ else
         exit 1
         ;;
     esac
-    requested_target="$("${python_bin}" -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${invocation_dir}/.claude/skills/${SKILL_NAME}")"
+    requested_target="$(shell_realpath "${invocation_dir}/.claude/skills/${SKILL_NAME}")"
   fi
 fi
 
@@ -108,6 +128,11 @@ if [[ "${current_dir}" == "${requested_target}" ]]; then
   exit 0
 fi
 
-cmd=("${python_bin}" "${INSTALLER}" --repo-root "${REPO_ROOT}" --install-dir "${requested_target}")
+cmd=(
+  "${python_bin}"
+  "$(to_python_path "${INSTALLER}")"
+  --repo-root "$(to_python_path "${REPO_ROOT}")"
+  --install-dir "$(to_python_path "${requested_target}")"
+)
 
 "${cmd[@]}"

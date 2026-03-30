@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # nuclear-bug-fix updater
+# Keep behavior in sync with scripts/update.ps1.
 # Invoked by: /nuclear-bug-fix update  OR  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
 
 set -euo pipefail
@@ -17,11 +18,21 @@ COMPARE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/compare"
 INSTALL_SH_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.sh"
 INSTALL_PS1_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.ps1"
 
+to_python_path() {
+  local path="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
 print_manual_reinstall() {
   echo "   Reinstall:"
   echo "     macOS/Linux personal: curl -fsSL ${INSTALL_SH_URL} | bash"
   echo "     macOS/Linux project:  curl -fsSL ${INSTALL_SH_URL} | bash -s -- --project"
-  echo "     Windows PowerShell:   irm ${INSTALL_PS1_URL} | iex"
+  echo "     Windows PS personal:  irm ${INSTALL_PS1_URL} | iex"
+  echo "     Windows PS project:   & ([scriptblock]::Create((irm ${INSTALL_PS1_URL}))) -Project"
 }
 
 read_skill_metadata_field() {
@@ -133,12 +144,14 @@ curl -sf -L "${DIST_URL}" -o "${TMP}" || {
 }
 
 # Sanity check — .skill is a zip; verify it contains a valid SKILL.md and matches release.json
-packaged_skill_md=$(python3 -c \
+validation_output=$(python3 -c \
   "import sys, zipfile; print(zipfile.ZipFile(sys.argv[1]).read('${SKILL_NAME}/SKILL.md').decode('utf-8'), end='')" \
-  "${TMP}" 2>/dev/null) || {
-  echo "❌ Downloaded file invalid (missing ${SKILL_NAME}/SKILL.md). Aborting."
+  "$(to_python_path "${TMP}")" 2>&1) || {
+  echo "❌ Downloaded file invalid or unreadable. Aborting."
+  [[ -n "${validation_output}" ]] && echo "   ${validation_output}"
   rm -f "${TMP}"; exit 1
 }
+packaged_skill_md="${validation_output}"
 
 echo "$packaged_skill_md" | grep -q "name: ${SKILL_NAME}" || {
   echo "❌ Downloaded file invalid (not a valid skill archive or missing skill name). Aborting."
@@ -187,7 +200,9 @@ if [[ ! -f "${SCRIPT_DIR}/install.py" ]]; then
   rm -f "${TMP}"; exit 1
 fi
 
-python3 "${SCRIPT_DIR}/install.py" --from-archive "${TMP}" --install-dir "${TARGET_DIR}" >/dev/null || {
+python3 "$(to_python_path "${SCRIPT_DIR}/install.py")" \
+  --from-archive "$(to_python_path "${TMP}")" \
+  --install-dir "$(to_python_path "${TARGET_DIR}")" >/dev/null || {
   echo "❌ Failed to install the downloaded update."
   print_manual_reinstall
   rm -f "${TMP}"; exit 1

@@ -1,8 +1,14 @@
 # Changelog
 
-## [1.3] - Unreleased
+## [1.4] - Unreleased
 
 - No unreleased changes yet.
+
+## [1.3] - 2026-03-30
+
+- Added `scripts/update.ps1` so Windows PowerShell installs can update in place without running the bash updater.
+- Documented that updater changes must keep `scripts/update.sh` and `scripts/update.ps1` in sync.
+- Fixed Windows Git Bash shell wrappers to convert paths through `cygpath` before invoking native Python binaries.
 
 ## [1.2] - 2026-03-30
 

@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: 1.2
-  source_commit: 8522c95427985d1a23c181ed2a9c3aa958a42ef8
+  version: 1.3
+  source_commit: f8ad9af4cca47c392b21344e7e6837034f82023d
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -33,15 +33,21 @@ Instead, run the update check:
 
 ```
 STEP 1: Locate the update script (check both install locations)
-  Personal install:  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
-  Project install:   bash .claude/skills/nuclear-bug-fix/scripts/update.sh
+  Bash / Git Bash / WSL:
+    Personal install:  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
+    Project install:   bash .claude/skills/nuclear-bug-fix/scripts/update.sh
 
+  Windows PowerShell:
+    Personal install:  & "$HOME\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
+    Project install:   & ".\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
+
+  Use the script that matches the current shell.
   Try personal first. If the file does not exist, try project.
   If neither exists: the skill was not installed from a directory; use manual reinstall.
 
 STEP 2: Report what happened
   - If already up to date:  "nuclear-bug-fix is current (version: <version>)"
-  - If updated:             "Updated nuclear-bug-fix <old> → <new>. Changes: <url>"
+  - If updated:             Report the updater output directly, including the full diff URL when shown.
   - If error:               Show the error and the reinstall commands:
                             macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.sh | bash
                             Windows PS:   irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.ps1 | iex
