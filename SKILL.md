@@ -151,12 +151,21 @@ HEISENBUG — Disappears or changes when observed/debugged.
             Cause: Race condition, timing, debugger alters execution,
                    uninitialized variable, optimizer changes behavior,
                    debug mode vs release mode difference.
-            Strategy: DO NOT USE DEBUGGER BREAKPOINTS.
-                      Use non-invasive logging only (no pausing execution).
-                      Reproduce under production-equivalent load and timing.
-                      Run the test 100+ times and look for the pattern.
-                      Focus: async timing, shared state, memory, init order.
+            Strategy:
+              STEP 1: Load references/intermittent-race-bugs.md immediately.
+              STEP 2: DO NOT use debugger breakpoints — they change timing.
+              STEP 3: Find the UNCONTROLLED VARIABLE (Phase A of playbook).
+              STEP 4: AMPLIFY the race window (Phase B — artificial delays,
+                      parallel loops, load amplification).
+              STEP 5: Use NON-INVASIVE logging only (Phase C — operation IDs,
+                      nanosecond timestamps, lock-free ring buffers).
+              STEP 6: Run TSan/race detector if language supports it (Phase E).
+              STEP 7: Identify the exact race type (Phase D — 8 types).
+              STEP 8: Apply fix from the Fix Ladder (Phase F — 6 levels).
+              STEP 9: Verify under same amplified conditions (Phase G).
             Sign: "It disappears when I try to debug it"
+                  "Only fails sometimes under load"
+                  "Works fine in dev, intermittent in prod"
 
 MANDELBUG — Chaotic. Fixing one thing reveals two more bugs.
             Cause: System grown without design over years.
@@ -205,7 +214,7 @@ You need to find and address the convergence point.
 | Resource found, interaction silently ignored | Interception layer (overlay, middleware, proxy, wrapper) |
 | Works locally, fails in prod/staging | Environment mismatch (config, secrets, versions, timing) |
 | Worked before, broken after change | Regression — recent change is the cause |
-| Fails only sometimes / under load | Race condition / async gap / resource exhaustion |
+| Fails only sometimes / under load | Race condition / async gap / resource exhaustion → load `references/intermittent-race-bugs.md` |
 | Write succeeds, read returns stale data | Caching / transaction isolation / wrong replica |
 | API returns 2xx, nothing changes | Silent swallow / wrong endpoint / payload mismatch |
 | Script runs, output is wrong | Format/type/encoding mismatch / off-by-one / wrong input file |
@@ -670,7 +679,7 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
 | `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
-| `references/world-methods.md` | Heisenbug/Mandelbug, bug > 2hrs unsolved, multi-factor, postmortem needed | Agans' 9 Rules, Bug taxonomy, 5 Whys, Fishbone, Fault Tree, SRE postmortem |
+| `references/intermittent-race-bugs.md` | ANY intermittent failure, race condition, flaky test, "only under load", "only sometimes" | Signature hunting, race window amplification, TSan tools, 8 race types with prove+fix, Fix Ladder, verification |
 | `references/external-intelligence.md` | Version mismatch, library-specific error, protocol bug, CVE suspected | RFC lookup, changelog analysis, GitHub issues, CVE database, MDN/caniuse |
 
 Each reference file has: symptom → why → how to prove → how to fix.
@@ -801,7 +810,10 @@ state it as a confirmed known bug with source link.
 20. **Heisenbug? No breakpoints.** Use non-invasive logging only. Production timing only.
 21. **Mandelbug? Stop patching.** Map the architecture. Fix the design, not the symptom.
 22. **If you didn't fix it, it ain't fixed.** Must fail under old conditions. Must pass after fix. Same conditions.
-23. **Intermittent?** Only: async timing, shared state, race conditions, resource exhaustion.
+23. **Intermittent = uncontrolled variable.** It is NOT random. Find the variable that determines whether it fires: load, timing, data, order, machine speed, test sequence.
+24. **Never breakpoint a Heisenbug.** Breakpoints change thread timing and make the race disappear. Use non-invasive nanosecond-timestamp logging and operation IDs only.
+25. **Amplify before diagnosing.** Add artificial sleep at the suspected race window. If bug fires consistently → race window confirmed. Then remove sleep and fix the synchronization.
+26. **Run TSan first.** If the language has a race detector (Go: -race, C/C++: -fsanitize=thread, Java: JCStress), run it before any manual analysis. It finds in one run what humans miss in days.
 24. **Silent failure?** Find the swallow. Something is catching and dropping the error.
 25. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
 26. **Fix didn't work?** Run Phase 6. Do not repeat Phase 3 with the same assumptions.
