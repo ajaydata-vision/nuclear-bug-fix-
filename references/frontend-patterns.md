@@ -234,3 +234,43 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Why:** Layout thrashing (read then write DOM in loop). Expensive computation on main thread. Non-GPU-accelerated CSS properties being animated.
 **Prove:** Open DevTools Performance tab. Record the jank. Look for long tasks and layout events.
 **Fix:** Use `transform` and `opacity` for animations (GPU-accelerated). Move computation to Web Worker. Batch DOM reads/writes with `requestAnimationFrame`.
+
+---
+
+## CATEGORY 11 — MOBILE (React Native / iOS / Android)
+
+### Pattern: React Native bridge error / native module crash
+**Symptom:** App crashes or freezes. "NativeModule is null". Bridge exception in logs.
+**Why:** Native module not linked. Platform mismatch. Old RN architecture (Bridge) vs New (JSI). Missing permission.
+**Prove:** Run `adb logcat` (Android) or Xcode console (iOS). Look for native exception stack.
+**Fix:** Re-run `pod install` (iOS). `npx react-native clean`. Check native module linking. For New Architecture: ensure module supports JSI.
+
+### Pattern: Works on Android, broken on iOS (or vice versa)
+**Symptom:** Feature working on one platform, silently failing on the other.
+**Why:** Platform-specific API behavior. Font rendering. Shadow/elevation differences. Date parsing differences. Permissions model differs.
+**Prove:** Run on both simulators side by side. Check `Platform.OS` branches. Log platform at failure point.
+**Fix:** Add platform-specific code. Use `Platform.select()`. Test on real device — simulators hide some bugs.
+
+### Pattern: App freezes / ANR on Android
+**Symptom:** App becomes unresponsive. Android shows "App Not Responding". iOS watchdog kills it.
+**Why:** Heavy computation on main/UI thread. Synchronous network call. Long-running operation blocking JS thread.
+**Prove:** Android: check logcat for "ANR in". iOS: capture crash report from device. Look for main thread blocking calls.
+**Fix:** Move heavy work to background thread / worker. Use `InteractionManager.runAfterInteractions()`. Never do sync I/O on main thread.
+
+### Pattern: Push notification not received
+**Symptom:** Notification sent (confirmed in server logs). Device never shows it.
+**Why:** Device token stale/expired. Permission not granted. Background app refresh disabled. Certificate expired (iOS). FCM/APNs config wrong.
+**Prove:** Check push delivery logs on server. Verify token is current. Check device settings for notification permission.
+**Fix:** Refresh device token on every app launch. Verify FCM/APNs credentials. Test with direct API call to FCM bypassing your server.
+
+### Pattern: Offline data not syncing when reconnected
+**Symptom:** User works offline. Comes back online. Changes lost or not pushed.
+**Why:** Sync logic not triggered on reconnect. Conflict resolution not implemented. Queue cleared on restart.
+**Prove:** Toggle airplane mode. Make changes. Reconnect. Check if sync fires. Log network state changes.
+**Fix:** Use `NetInfo.addEventListener` to trigger sync on reconnect. Persist queue to AsyncStorage/SQLite. Handle conflict resolution explicitly.
+
+### Pattern: Memory warning / app killed on device
+**Symptom:** App works fine then suddenly closes. More frequent on older devices.
+**Why:** Memory leak. Large images not released. Too many components mounted. Redux store growing unbounded.
+**Prove:** Xcode Memory Graph (iOS). Android Memory Profiler. Watch memory usage as you navigate.
+**Fix:** Unmount unused components. Compress images. Paginate lists (FlatList, not ScrollView with all items). Clear old data from store.

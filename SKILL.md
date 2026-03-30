@@ -130,11 +130,12 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | Domain | Signals | Reference File |
 |---|---|---|
 | **Frontend** | UI not rendering, CSS broken, component state wrong, hydration error, bundle error, browser-only bug, routing broken, form not submitting, WebSocket UI issue | `references/frontend-patterns.md` |
+| **Mobile** | App crash, React Native bridge error, iOS/Android specific behavior, device permission, push notification, offline sync, memory warning on device | `references/frontend-patterns.md` + mobile section |
 | **Backend** | API response wrong, auth failing, DB issue, background job silent, queue not consumed, file upload broken, rate limit wrong, session bug, ORM query wrong | `references/backend-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
-### 2D — Bug Classification (Critical — Determines Entire Strategy)
+Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both. (Critical — Determines Entire Strategy)
 
 Different bug types require completely different debugging strategies.
 Identify the bug type before choosing any approach.
@@ -194,6 +195,8 @@ You need to find and address the convergence point.
 
 ---
 
+### 2B — Symptom-to-Category Map
+
 | Symptom Signal | Root Cause Category |
 |---|---|
 | Action fires, state not updated | Event system bypass / framework zone not notified |
@@ -240,9 +243,13 @@ Known danger combinations:
 - Behavior contradicts what the official docs say it should do
 - Bug involves a protocol (HTTP/2, WebSocket, SMTP, OAuth) → check RFC
 - Bug is security/auth related → check CVEs
-→ Go to Phase 3.4 (External Intelligence) immediately
+→ Go to Phase 3.6 (External Intelligence) immediately
 
 ---
+
+---
+
+### 2F — Meta-Checks (Always Run Before Diagnosis)
 
 Before diagnosing the code, verify the debugging setup itself is not lying:
 
@@ -268,6 +275,16 @@ Before diagnosing the code, verify the debugging setup itself is not lying:
    - First bug masking second bug?
    - Fix for Bug A revealing Bug B (which was always there)?
 
+5. **Can you add logs / access the environment at all?**
+   - If NO log access (prod restriction, NDA, customer system):
+     → Use external intelligence (Phase 3.6) and binary search (Phase 3.4) exclusively.
+     → Ask user to add a single sentinel log at the failure point.
+     → Work from error message + stack trace + symptom pattern matching only.
+     → Match against closest pattern in reference files.
+   - If NO code access (closed-source, proprietary):
+     → Focus entirely on configuration, env vars, version compatibility, known bugs.
+     → External intelligence becomes the primary diagnostic tool.
+
 ---
 
 ## PHASE 3 — ADVERSARIAL DIAGNOSIS
@@ -292,7 +309,26 @@ These take 30 seconds to check.
 Engineers waste 4 hours on sophisticated diagnosis before checking these.
 ```
 
-### 3.1 — ASSUME EVERYONE WAS WRONG
+### 3.1 — AUDIT TRAIL (Start Immediately — Never Skip)
+
+Open a scratch file or notes doc RIGHT NOW. Record every step as you go.
+Do not wait until later. Evidence from step 1 is already valuable at step 10.
+
+```
+Format for each entry:
+[TIMESTAMP] HYPOTHESIS: [what you thought]
+[TIMESTAMP] ACTION:     [what you did / changed / checked]
+[TIMESTAMP] OBSERVED:   [what actually happened]
+[TIMESTAMP] CONCLUDED:  [what this proves or eliminates]
+
+Why this is non-negotiable:
+1. You will circle back to dead paths after 3 hours without this
+2. If someone else takes over, they start from the full picture
+3. The pattern in failed attempts often points directly to root cause
+4. It becomes the postmortem — don't write it twice
+```
+
+### 3.2 — ASSUME EVERYONE WAS WRONG
 
 State: all prior assumptions are reset. Start from zero.
 
@@ -310,7 +346,7 @@ List **5–10 possible root causes** — including the embarrassing ones:
 - Error caught and swallowed silently in a try/catch somewhere
 - Two bugs interacting — fixing one reveals the other
 
-### 3.2 — LAST KNOWN GOOD ANALYSIS
+### 3.3 — LAST KNOWN GOOD ANALYSIS
 
 If the bug is a regression (worked before, broken now):
 
@@ -322,7 +358,7 @@ If the bug is a regression (worked before, broken now):
 
 The answer is always in the delta. Find the delta.
 
-### 3.3 — BINARY SEARCH THE FAILURE
+### 3.4 — BINARY SEARCH THE FAILURE
 
 Systematically narrow the failure point. Do not guess.
 
@@ -347,7 +383,7 @@ Works directly? → Bug is in your code's request construction.
 Fails directly? → Bug is in the API/server side.
 ```
 
-### 3.4 — TRACE THE EXECUTION PATH
+### 3.5 — TRACE THE EXECUTION PATH
 
 Walk the **exact execution path** from input/trigger to failure point.
 Step by step. No summaries. No skipping. No "etc."
@@ -363,7 +399,7 @@ Pay special attention to:
 - Every external system call (DB, API, filesystem, cache)
 - Every condition branch (which path actually executes?)
 
-### 3.4 — EXTERNAL INTELLIGENCE GATHERING
+### 3.6 — EXTERNAL INTELLIGENCE GATHERING
 
 **Run this BEFORE writing forensic logs. Do not skip.**
 
@@ -428,11 +464,11 @@ Found a docs discrepancy?
 → Quote the relevant docs section in the verdict.
 
 Found nothing?
-→ This is a new/unknown bug. Continue to 3.5 (Find the Lies).
-→ The forensic logging in 3.6 will prove the root cause.
+→ This is a new/unknown bug. Continue to 3.7 (Find the Lies).
+→ The forensic logging in 3.8 will prove the root cause.
 ```
 
-### 3.5 — FIND THE LIES
+### 3.7 — FIND THE LIES
 
 List every assumption in the code that is **assumed true but never verified**.
 These are the primary suspects.
@@ -463,7 +499,7 @@ SYSTEM ASSUMPTIONS
 □ Is the service/dependency actually running and reachable?
 ```
 
-### 3.6 — FORENSIC LOGGING
+### 3.8 — FORENSIC LOGGING
 
 Write debug logging code adapted to the user's actual stack.
 Place a log at **every unchecked assumption** from 3.5.
@@ -520,7 +556,7 @@ log("[DEBUG] ★★★ FIXED CODE EXECUTING v2 ★★★")
 # If you don't see this in output → wrong code is running
 ```
 
-### 3.7 — VERDICT
+### 3.9 — VERDICT
 
 Give **one** root cause. Not a list. Not "possibly". Stated as fact.
 
@@ -539,7 +575,7 @@ AFTER:
 WHY THIS FIX WORKS: [one sentence]
 ```
 
-### 3.8 — 5 WHYS (After Initial Verdict — Find the Real Root Cause)
+### 3.10 — 5 WHYS (After Initial Verdict — Find the Real Root Cause)
 
 The first answer is rarely the root cause. It is a symptom.
 Apply 5 Whys to dig to the actual cause underneath the cause.
@@ -575,7 +611,7 @@ The 5 Whys root cause identifies what to fix so it never happens again.
 BOTH fixes should be provided.
 ```
 
-### 3.9 — CHANGE ONE THING AT A TIME
+### 3.11 — CHANGE ONE THING AT A TIME
 
 When applying fixes — especially during escalation:
 ```
@@ -595,35 +631,45 @@ This is the only way to isolate what actually fixed it.
 This is also how you avoid: "it's fixed" → bug returns in 2 days.
 ```
 
-### 3.10 — AUDIT TRAIL
+### 3.12 — GET A FRESH VIEW (If Stuck > 2 Hours)
 
-Keep a running log of every debugging step. This is not optional.
+If 2+ hours have passed with no resolution, stop and reset:
 
 ```
-Format for each step:
-[TIMESTAMP] HYPOTHESIS: [what you thought]
-[TIMESTAMP] ACTION: [what you did / changed]
-[TIMESTAMP] OBSERVATION: [what happened]
-[TIMESTAMP] CONCLUSION: [what this proves or eliminates]
+RUBBER DUCK: Explain the bug out loud — step by step, to anyone or anything.
+  As you articulate it precisely, the flaw often surfaces.
+  The act of explaining forces you to state every assumption explicitly.
+  "It should work because..." — that sentence contains the bug.
 
-Why this matters:
-1. You won't repeat dead paths (common to circle back after 3 hours)
-2. If someone else takes over, they don't start from zero
-3. It becomes the basis for the postmortem / blameless review
-4. Pattern in failed attempts often points directly to root cause
+PAIR DEBUG: Hand the audit trail to another engineer cold.
+  Brief them only on the symptom. Let them read the trail.
+  Fresh eyes see what familiarity hides.
+  Junior engineers find what seniors miss — no inherited assumptions.
+
+STEP AWAY: Sleep on it if not urgent. The unconscious brain debugs.
+  The "shower fix" is a real phenomenon. Forced rest often breaks the logjam.
+
+FLIP YOUR ASSUMPTION: If you're convinced the bug is in Module A →
+  Deliberately investigate Module B.
+  The real issue is often in the last place you'd look.
+  If everyone agrees it's the database → check the application layer.
 ```
 
---- — DEEP PATTERN REFERENCE (Domain Router)
+---
+
+## PHASE 4 — DEEP PATTERN REFERENCE (Domain Router)
 
 Load the reference file(s) matching the domain identified in Phase 2A.
 Always load ALL files relevant to the bug — never just one if multiple apply.
 
 | File | When to Load | Contents |
 |---|---|---|
-| `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing bug | Rendering, hydration, state, CSS, forms, WebSocket, PWA, browser compat |
+| `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing/mobile bug | Rendering, hydration, state, CSS, forms, WebSocket, browser compat, performance |
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
-| `references/world-methods.md` | Heisenbug/Mandelbug identified, bug > 1hr unsolved, multi-factor, postmortem needed | Agans' 9 Rules, Bug taxonomy, 5 Whys, Fishbone, Fault Tree, SRE postmortem, Chaos testing |
+| `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
+| `references/world-methods.md` | Heisenbug/Mandelbug, bug > 2hrs unsolved, multi-factor, postmortem needed | Agans' 9 Rules, Bug taxonomy, 5 Whys, Fishbone, Fault Tree, SRE postmortem |
+| `references/external-intelligence.md` | Version mismatch, library-specific error, protocol bug, CVE suspected | RFC lookup, changelog analysis, GitHub issues, CVE database, MDN/caniuse |
 
 Each reference file has: symptom → why → how to prove → how to fix.
 Load them. Read them. Match the pattern. Do not guess.
@@ -675,7 +721,7 @@ YES → Continue to Step 2.
 ```
 Is the BEFORE code actually what was in the file?
 Run git diff or compare carefully.
-Mismatch → You fixed the wrong line. Re-read 3.5.
+Mismatch → You fixed the wrong line. Re-read 3.7.
 ```
 
 ### Step 3 — Check for a second bug
@@ -692,7 +738,7 @@ Strip everything. Create the smallest possible failing case:
 - Use hardcoded inputs
 - Run in isolation (no DB, no network, no framework if possible)
 
-If it still fails in isolation → core logic bug. Reread 3.3-3.5.
+If it still fails in isolation → core logic bug. Reread 3.4-3.7.
 If it passes in isolation → bug is in the interaction, not the logic.
   → Add back one layer at a time until it breaks again.
   → The layer that breaks it = the culprit.
