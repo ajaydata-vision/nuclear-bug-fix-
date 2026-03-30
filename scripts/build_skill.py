@@ -27,6 +27,7 @@ FORBIDDEN_PREFIXES = (
     "evals/",
 )
 VERSION_PATTERN = re.compile(r"(^\s{1,4}version:\s*)\S+", re.MULTILINE)
+SOURCE_COMMIT_PATTERN = re.compile(r"(^\s{1,4}source_commit:\s*)\S+", re.MULTILINE)
 DEFAULT_RELEASE_ARTIFACT = f"dist/{SKILL_NAME}.skill"
 
 
@@ -69,44 +70,76 @@ def patch_version(skill_text: str, version: str) -> str:
     return updated
 
 
-def extract_skill_version(skill_text: str) -> str:
-    match = re.search(r"^\s{1,4}version:\s*(\S+)", skill_text, re.MULTILINE)
-    if not match:
+def patch_source_commit(skill_text: str, source_commit: str | None) -> str:
+    if source_commit is None:
+        return skill_text
+
+    updated, count = SOURCE_COMMIT_PATTERN.subn(
+        lambda match: f"{match.group(1)}{source_commit}",
+        skill_text,
+        count=1,
+    )
+    if count == 1:
+        return updated
+
+    version_match = VERSION_PATTERN.search(skill_text)
+    if version_match is None:
+        raise ValueError("Could not locate metadata.version in SKILL.md")
+
+    insert_at = version_match.end()
+    return f"{skill_text[:insert_at]}\n  source_commit: {source_commit}{skill_text[insert_at:]}"
+
+
+def patch_skill_metadata(skill_text: str, version: str, source_commit: str | None) -> str:
+    return patch_source_commit(patch_version(skill_text, version), source_commit)
+
+
+def extract_skill_metadata(skill_text: str) -> dict[str, str]:
+    version_match = re.search(r"^\s{1,4}version:\s*(\S+)", skill_text, re.MULTILINE)
+    if not version_match:
         raise ValueError("Packaged SKILL.md is missing metadata.version")
-    return match.group(1)
+
+    source_commit_match = re.search(r"^\s{1,4}source_commit:\s*(\S+)", skill_text, re.MULTILINE)
+    metadata = {"version": version_match.group(1)}
+    if source_commit_match:
+        metadata["source_commit"] = source_commit_match.group(1)
+    return metadata
 
 
-def stamp_skill_file(skill_md_path: Path, version: str) -> None:
+def stamp_skill_file(skill_md_path: Path, version: str, source_commit: str | None) -> None:
     skill_md_path.write_text(
-        patch_version(skill_md_path.read_text(encoding="utf-8"), version),
+        patch_skill_metadata(skill_md_path.read_text(encoding="utf-8"), version, source_commit),
         encoding="utf-8",
     )
-    print(f"Stamped {skill_md_path} with version {version}")
+    if source_commit is not None:
+        print(f"Stamped {skill_md_path} with version {version} and source_commit {source_commit}")
+    else:
+        print(f"Stamped {skill_md_path} with version {version}")
 
 
-def resolve_git_metadata(version: str) -> dict[str, str]:
+def resolve_git_metadata(source_commit: str) -> dict[str, str]:
     try:
         result = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "show", "-s", "--format=%H%n%h%n%cs%n%s", version],
+            ["git", "-C", str(REPO_ROOT), "show", "-s", "--format=%H%n%h%n%cs%n%s", source_commit],
             capture_output=True,
             text=True,
             check=True,
         )
     except subprocess.CalledProcessError:
         return {
-            "source_commit": version,
-            "version": version,
+            "source_commit": source_commit,
+            "source_commit_short": source_commit,
             "source_date": "",
             "source_subject": "",
         }
 
     lines = result.stdout.splitlines()
     if len(lines) < 4:
-        raise ValueError(f"Could not resolve git metadata for version {version}")
+        raise ValueError(f"Could not resolve git metadata for source commit {source_commit}")
 
     return {
         "source_commit": lines[0],
-        "version": lines[1],
+        "source_commit_short": lines[1],
         "source_date": lines[2],
         "source_subject": lines[3],
     }
@@ -120,12 +153,13 @@ def repo_relative_path(path: Path) -> str:
         return resolved.as_posix()
 
 
-def write_release_manifest(output_path: Path, version: str, artifact: str) -> None:
-    metadata = resolve_git_metadata(version)
+def write_release_manifest(output_path: Path, version: str, artifact: str, source_commit: str) -> None:
+    metadata = resolve_git_metadata(source_commit)
     manifest = {
         "skill": SKILL_NAME,
-        "version": metadata["version"],
+        "version": version,
         "source_commit": metadata["source_commit"],
+        "source_commit_short": metadata["source_commit_short"],
         "source_date": metadata["source_date"],
         "source_subject": metadata["source_subject"],
         "artifact": artifact,
@@ -144,7 +178,7 @@ def load_release_manifest(manifest_path: Path) -> dict[str, str]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid release manifest JSON: {manifest_path}") from exc
 
-    required_keys = ("skill", "version", "artifact")
+    required_keys = ("skill", "version", "source_commit", "artifact")
     missing = [key for key in required_keys if key not in manifest]
     if missing:
         raise ValueError(f"Release manifest missing required keys: {', '.join(missing)}")
@@ -154,10 +188,10 @@ def load_release_manifest(manifest_path: Path) -> dict[str, str]:
             f"Release manifest skill mismatch: expected {SKILL_NAME}, found {manifest['skill']}"
         )
 
-    return manifest
+    return {key: str(value) for key, value in manifest.items()}
 
 
-def build_archive(output_path: Path, version: str | None) -> None:
+def build_archive(output_path: Path, version: str | None, source_commit: str | None) -> None:
     tracked_files = []
     for rel_path in sorted(path.as_posix() for path in git_tracked_files()):
         if should_package(rel_path):
@@ -175,7 +209,11 @@ def build_archive(output_path: Path, version: str | None) -> None:
             source_path = REPO_ROOT / rel_path
             arcname = f"{ARCHIVE_PREFIX}{rel_path}"
             if rel_path == "SKILL.md" and version is not None:
-                data = patch_version(source_path.read_text(encoding="utf-8"), version).encode("utf-8")
+                data = patch_skill_metadata(
+                    source_path.read_text(encoding="utf-8"),
+                    version,
+                    source_commit,
+                ).encode("utf-8")
                 info = zipfile.ZipInfo(arcname)
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = 0o100644 << 16
@@ -198,6 +236,7 @@ def validate_archive(
     if manifest_path is not None:
         manifest = load_release_manifest(manifest_path)
         manifest_version = manifest["version"]
+        manifest_source_commit = manifest["source_commit"]
         if expected_version is None:
             expected_version = manifest_version
         elif expected_version != manifest_version:
@@ -240,11 +279,20 @@ def validate_archive(
         if "name: nuclear-bug-fix" not in skill_text:
             raise ValueError("Packaged SKILL.md is missing the skill name")
 
+        metadata = extract_skill_metadata(skill_text)
         if expected_version is not None:
-            actual_version = extract_skill_version(skill_text)
+            actual_version = metadata["version"]
             if actual_version != expected_version:
                 raise ValueError(
                     f"Packaged SKILL.md version mismatch: expected {expected_version}, found {actual_version}"
+                )
+
+        if manifest_path is not None:
+            actual_source_commit = metadata.get("source_commit")
+            if actual_source_commit != manifest_source_commit:
+                raise ValueError(
+                    "Packaged SKILL.md source_commit mismatch: "
+                    f"expected {manifest_source_commit}, found {actual_source_commit or 'missing'}"
                 )
 
     print(f"Validated {archive_path} ({archive_path.stat().st_size:,} bytes)")
@@ -254,13 +302,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build and validate the nuclear-bug-fix skill archive")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    stamp_parser = subparsers.add_parser("stamp-version", help="Stamp metadata.version in SKILL.md")
+    stamp_parser = subparsers.add_parser("stamp-version", help="Stamp release metadata into SKILL.md")
     stamp_parser.add_argument("--skill-md", required=True, type=Path, help="Path to SKILL.md")
     stamp_parser.add_argument("--version", required=True, help="Version string to stamp into SKILL.md")
+    stamp_parser.add_argument("--source-commit", help="Exact source commit to stamp into SKILL.md")
 
     build_parser = subparsers.add_parser("build", help="Build the .skill archive from tracked files")
     build_parser.add_argument("--output", required=True, type=Path, help="Archive output path")
     build_parser.add_argument("--version", help="Version string to stamp into the packaged SKILL.md")
+    build_parser.add_argument("--source-commit", help="Source commit to stamp into the packaged SKILL.md")
 
     manifest_parser = subparsers.add_parser(
         "write-release-manifest",
@@ -268,6 +318,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     manifest_parser.add_argument("--output", required=True, type=Path, help="Manifest output path")
     manifest_parser.add_argument("--version", required=True, help="Released source version")
+    manifest_parser.add_argument("--source-commit", required=True, help="Released source commit")
     manifest_parser.add_argument(
         "--artifact",
         default=DEFAULT_RELEASE_ARTIFACT,
@@ -295,11 +346,11 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     try:
         if args.command == "stamp-version":
-            stamp_skill_file(args.skill_md, args.version)
+            stamp_skill_file(args.skill_md, args.version, args.source_commit)
         elif args.command == "build":
-            build_archive(args.output, args.version)
+            build_archive(args.output, args.version, args.source_commit)
         elif args.command == "write-release-manifest":
-            write_release_manifest(args.output, args.version, args.artifact)
+            write_release_manifest(args.output, args.version, args.artifact, args.source_commit)
         elif args.command == "validate":
             validate_archive(args.archive, args.expected_version, args.max_size_bytes, args.manifest)
         else:

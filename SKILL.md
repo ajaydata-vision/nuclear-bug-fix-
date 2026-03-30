@@ -1,7 +1,7 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: e890e27
+  version: 1.1
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -39,7 +39,7 @@ STEP 1: Locate the update script (check both install locations)
   If neither exists: the skill was not installed from a directory; use manual update.
 
 STEP 2: Report what happened
-  - If already up to date:  "nuclear-bug-fix is current (version: <hash>)"
+  - If already up to date:  "nuclear-bug-fix is current (version: <version>)"
   - If updated:             "Updated nuclear-bug-fix <old> → <new>. Changes: <url>"
   - If error:               Show the error and the manual install command:
                             curl -L https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/dist/nuclear-bug-fix.skill -o /tmp/nuclear-bug-fix.skill && claude skills add /tmp/nuclear-bug-fix.skill --force

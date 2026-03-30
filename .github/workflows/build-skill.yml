@@ -27,17 +27,25 @@ jobs:
       - name: Install PyYAML (needed for validation)
         run: pip install pyyaml
 
-      - name: Get short commit SHA
+      - name: Read release version
+        id: release
+        run: echo "version=$(tr -d '\n' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Get commit SHAs
         id: sha
-        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "full=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Stamp version into SKILL.md metadata
         env:
-          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.sha.outputs.full }}
         run: |
           python3 scripts/build_skill.py stamp-version \
             --skill-md SKILL.md \
-            --version "${SHORT_SHA}"
+            --version "${RELEASE_VERSION}" \
+            --source-commit "${SOURCE_COMMIT}"
 
       - name: Validate SKILL.md
         run: |
@@ -64,19 +72,23 @@ jobs:
 
       - name: Build .skill file (zip)
         env:
-          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.sha.outputs.full }}
         run: |
           python3 scripts/build_skill.py build \
             --output dist/nuclear-bug-fix.skill \
-            --version "${SHORT_SHA}"
+            --version "${RELEASE_VERSION}" \
+            --source-commit "${SOURCE_COMMIT}"
 
       - name: Write release manifest
         env:
-          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.sha.outputs.full }}
         run: |
           python3 scripts/build_skill.py write-release-manifest \
             --output dist/release.json \
-            --version "${SHORT_SHA}" \
+            --version "${RELEASE_VERSION}" \
+            --source-commit "${SOURCE_COMMIT}" \
             --artifact dist/nuclear-bug-fix.skill
 
       - name: Validate built artifact
@@ -88,7 +100,7 @@ jobs:
 
       - name: Commit and push dist + updated SKILL.md
         env:
-          SHORT_SHA: ${{ steps.sha.outputs.short }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -97,7 +109,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "Nothing changed — skip commit"
           else
-            git commit -m "ci: build dist @ ${SHORT_SHA} [skip ci]"
+            git commit -m "ci: build dist @ ${RELEASE_VERSION} [skip ci]"
             git push
-            echo "Pushed dist/nuclear-bug-fix.skill (version ${SHORT_SHA})"
+            echo "Pushed dist/nuclear-bug-fix.skill (version ${RELEASE_VERSION})"
           fi

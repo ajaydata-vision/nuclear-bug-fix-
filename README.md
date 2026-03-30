@@ -43,6 +43,8 @@ It was born from real production debugging sessions where standard code review, 
 
 ```text
 nuclear-bug-fix/
+├── VERSION                               # Current release version (1.1)
+├── CHANGELOG.md                          # 1.1 release notes and 1.2 unreleased bucket
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
 ├── references/                           # 8 reference files for patterns, DDx, and external intelligence
 ├── benchmarks/                           # 100 benchmark cases plus suite metadata
@@ -55,6 +57,8 @@ nuclear-bug-fix/
 ```
 
 **Current repo snapshot:** 8 reference files, 100 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
+**Current release:** `1.1`  
+**Next change bucket:** `1.2`
 
 The reference files follow the same pattern language: **Symptom -> Why -> Prove -> Fix**
 
@@ -147,7 +151,7 @@ exhaustion, off-by-one errors, mutation during iteration
 
 ### Step 1 — Download the skill file
 Download `nuclear-bug-fix.skill` from the [Releases](https://github.com/ajaydata-vision/nuclear-bug-fix-/releases) page  
-or clone this repository.
+or directly from [`dist/nuclear-bug-fix.skill`](https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/dist/nuclear-bug-fix.skill).
 
 ### Step 2 — Install in Claude Code
 ```bash
@@ -250,6 +254,7 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 | Reference files present (8) | ✅ Pass |
 | Benchmark cases present (100) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
+| Semantic release version (`1.1`) | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
 | Release manifest ↔ packaged version alignment | ✅ Pass |
 
