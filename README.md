@@ -161,6 +161,13 @@ Claude Code discovers skills from directories, not from a special import command
 
 ### Git install
 
+This repo intentionally ships two root setup files:
+
+- `./setup` for `bash`/`sh` on macOS, Linux, Git Bash, or WSL
+- `.\setup.ps1` for Windows PowerShell
+
+Use the setup file that matches the shell you are currently running inside Claude Code.
+
 Personal install:
 ```bash
 git clone --single-branch --depth 1 https://github.com/ajaydata-vision/nuclear-bug-fix- ~/.claude/skills/nuclear-bug-fix
