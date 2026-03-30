@@ -1,0 +1,137 @@
+name: Build skill
+
+on:
+  push:
+    branches: [main]
+
+# Prevent loop: skip when this workflow is the one committing
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use a PAT or the default GITHUB_TOKEN.
+          # GITHUB_TOKEN is sufficient for same-repo pushes.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyYAML (needed for validation)
+        run: pip install pyyaml
+
+      - name: Get short commit SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp version into SKILL.md metadata
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        run: |
+          python3 - << 'PYEOF'
+          import re, os
+          sha = os.environ["SHORT_SHA"]
+          with open("SKILL.md") as f:
+              content = f.read()
+          # Replace: "  version: <anything>" inside the metadata block
+          updated = re.sub(
+              r"(^\s{1,4}version:\s*)\S+",
+              lambda m: m.group(1) + sha,
+              content,
+              flags=re.MULTILINE,
+          )
+          with open("SKILL.md", "w") as f:
+              f.write(updated)
+          print(f"Stamped version: {sha}")
+          PYEOF
+
+      - name: Validate SKILL.md
+        run: |
+          python3 - << 'PYEOF'
+          import re, yaml, sys
+          from pathlib import Path
+
+          ALLOWED = {"name", "description", "license", "allowed-tools", "metadata", "compatibility"}
+
+          content = Path("SKILL.md").read_text()
+          if not content.startswith("---"):
+              sys.exit("No frontmatter")
+          m = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+          if not m:
+              sys.exit("Invalid frontmatter")
+          fm = yaml.safe_load(m.group(1))
+          bad = set(fm) - ALLOWED
+          if bad:
+              sys.exit(f"Unexpected frontmatter keys: {bad}")
+          if "name" not in fm or "description" not in fm:
+              sys.exit("Missing required frontmatter fields")
+          print("SKILL.md valid")
+          PYEOF
+
+      - name: Build .skill file (zip)
+        run: |
+          python3 - << 'PYEOF'
+          import zipfile, fnmatch
+          from pathlib import Path
+
+          EXCLUDE_DIRS  = {"__pycache__", "node_modules", ".git", ".github"}
+          EXCLUDE_FILES = {".DS_Store"}
+          EXCLUDE_GLOBS = {"*.pyc"}
+          ROOT_EXCLUDE  = {"evals"}          # excluded only at skill root
+
+          skill_root = Path(".")
+          dist = Path("dist")
+          dist.mkdir(exist_ok=True)
+          out = dist / "nuclear-bug-fix.skill"
+
+          def skip(rel: Path) -> bool:
+              parts = rel.parts
+              # Skip hidden dirs and build artifacts
+              if any(p in EXCLUDE_DIRS for p in parts):
+                  return True
+              # Skip evals/ at root only
+              if len(parts) >= 1 and parts[0] in ROOT_EXCLUDE:
+                  return True
+              if rel.name in EXCLUDE_FILES:
+                  return True
+              return any(fnmatch.fnmatch(rel.name, p) for p in EXCLUDE_GLOBS)
+
+          added = []
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+              for f in sorted(skill_root.rglob("*")):
+                  if not f.is_file():
+                      continue
+                  rel = f.relative_to(skill_root)
+                  arc = Path("nuclear-bug-fix") / rel
+                  if skip(arc):
+                      continue
+                  zf.write(f, arc)
+                  added.append(str(arc))
+
+          for a in added:
+              print(f"  + {a}")
+          print(f"\nBuilt {out}  ({out.stat().st_size:,} bytes,  {len(added)} files)")
+          PYEOF
+
+      - name: Commit and push dist + updated SKILL.md
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dist/nuclear-bug-fix.skill SKILL.md
+          # Only commit if something actually changed
+          if git diff --staged --quiet; then
+            echo "Nothing changed — skip commit"
+          else
+            git commit -m "ci: build dist @ ${SHORT_SHA} [skip ci]"
+            git push
+            echo "Pushed dist/nuclear-bug-fix.skill (version ${SHORT_SHA})"
+          fi
