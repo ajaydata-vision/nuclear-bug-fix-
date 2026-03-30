@@ -43,21 +43,76 @@ It was born from real production debugging sessions where standard code review, 
 
 ```
 nuclear-bug-fix/
-├── SKILL.md                          # Core methodology — 6 phases, 14 rules
+├── SKILL.md                              # Core methodology — 6 phases, 18 rules
 └── references/
-    ├── frontend-patterns.md          # 10 categories, 32 patterns
-    ├── backend-patterns.md           # 9 categories, 28 patterns
-    ├── integration-patterns.md       # 7 categories, 30 patterns
-    └── bug-patterns.md               # 10 categories, 45 universal patterns
+    ├── external-intelligence.md          # Docs, RFC, changelog, CVE, version lookup
+    ├── frontend-patterns.md              # 10 categories, 32 patterns
+    ├── backend-patterns.md               # 9 categories, 28 patterns
+    ├── integration-patterns.md           # 7 categories, 30 patterns
+    └── bug-patterns.md                   # 10 categories, 45 universal patterns
 ```
 
-**Total: 36 categories · 135 patterns · 1,400+ lines of methodology**
+**Total: 36 categories · 135 patterns · 5 reference files · 1,900+ lines of methodology**
 
 Every pattern has 4 fields: **Symptom → Why → Prove it → Fix it**
 
 ---
 
-## 🗂️ Coverage
+## 🌐 External Intelligence Layer
+
+When internal analysis isn't enough, the skill searches external sources **before writing forensic logs** — because a known bug has a known fix, and finding it takes 2 minutes vs rediscovering it in hours.
+
+### What it searches (in priority order)
+
+| Tier | Source | What It Finds |
+|---|---|---|
+| 1 | **Official Docs** | API misuse, version-specific behavior, deprecations |
+| 1 | **Official Changelog** | Breaking changes between versions, regressions |
+| 2 | **GitHub Issues** | Confirmed bugs, workarounds, fixed-in versions |
+| 2 | **Stack Overflow** | Community fixes with exact error text matching |
+| 3 | **RFC Specifications** | Protocol violations (HTTP, OAuth, JWT, WebSocket, SMTP) |
+| 4 | **CVE Database** | Known security vulnerabilities in the version |
+| 4 | **Package Advisories** | npm audit, pip-audit, govulncheck |
+| 5 | **MDN / caniuse** | Browser API support, compatibility quirks |
+
+### RFC Coverage
+
+The skill knows exactly which RFC to check for which protocol:
+
+```
+HTTP semantics     → RFC 9110    OAuth 2.0      → RFC 6749
+HTTP/1.1 syntax    → RFC 9112    PKCE           → RFC 7636
+HTTP/2             → RFC 9113    JWT            → RFC 7519
+HTTP Cookies       → RFC 6265    JSON Web Keys  → RFC 7517
+WebSocket          → RFC 6455    SMTP           → RFC 5321
+HTTP Auth          → RFC 7235    IMAP4rev2      → RFC 9051
+Timestamps/Dates   → RFC 3339    JSON           → RFC 8259
+Base64             → RFC 4648    URI Syntax     → RFC 3986
+```
+
+### Version Intelligence
+
+Exact version numbers are now **required** at intake. The skill uses them to:
+- Flag versions < 6 months old (possible unpatched bugs)
+- Flag versions > 2 years old (missing critical patches)
+- Detect peer dependency mismatches
+- Search changelogs between working version and current
+- Look up CVEs for the exact version in use
+
+### Search Trigger Conditions
+
+The skill automatically triggers external search when:
+```
+✓ Error message contains a library/framework name
+✓ Bug started after a version update
+✓ Behavior contradicts what the official docs say
+✓ Bug involves a protocol (HTTP, WebSocket, OAuth, SMTP, gRPC)
+✓ Bug is auth/security related
+✓ Framework version is < 6 months old
+✓ Code cannot be explained as broken just by reading it
+```
+
+---
 
 ### 🖥️ Frontend
 Rendering & display bugs, CSS broken in prod, hydration mismatches (SSR),  
@@ -159,7 +214,7 @@ PHASE 6 — ESCALATION      If fix didn't work: 5-step escalation loop.
 
 ---
 
-## 🔑 The 14 Ironclad Rules
+## 🔑 The 18 Ironclad Rules
 
 1. Fix only what is broken — never rewrite the whole file
 2. Never revisit closed paths — already tried = dead path
@@ -168,13 +223,17 @@ PHASE 6 — ESCALATION      If fix didn't work: 5-step escalation loop.
 5. Sentinel log in every fix — confirm the fix is actually running
 6. Never assume — every assumption gets a log or assertion
 7. Meta-check first — verify the debugging setup before the code
-8. Intermittent? Focus only on async timing, shared state, race conditions
-9. Silent failure? Find the swallow — something is catching the error
-10. Works locally, fails in prod? Always environment: config, secrets, version
-11. State not updating? Find the interception layer
-12. Fix didn't work? Run Phase 6 — do not repeat Phase 3
-13. Two different symptoms? Two bugs — treat them separately
-14. Recent change caused it? The delta is the bug — diff it, revert it, prove it
+8. Search before concluding — Phase 3.4 runs before forensic logs. Known bug = known fix
+9. Exact versions required — never accept "latest", they unlock known-bug detection
+10. Docs trump assumptions — if official docs say it works differently, the code is wrong
+11. RFC is ground truth for protocols — HTTP, OAuth, JWT, WebSocket, SMTP checked against spec
+12. Intermittent? Focus only on async timing, shared state, race conditions
+13. Silent failure? Find the swallow — something is catching the error
+14. Works locally, fails in prod? Always environment: config, secrets, version
+15. State not updating? Find the interception layer
+16. Fix didn't work? Run Phase 6 — do not repeat Phase 3
+17. Two different symptoms? Two bugs — treat them separately
+18. Recent change caused it? The delta is the bug — diff it, revert it, prove it
 
 ---
 
