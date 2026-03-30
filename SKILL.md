@@ -137,6 +137,8 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 
 Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both. (Critical — Determines Entire Strategy)
 
+### 2D — Bug Classification (Critical — Determines Entire Strategy)
+
 Different bug types require completely different debugging strategies.
 Identify the bug type before choosing any approach.
 
@@ -502,7 +504,7 @@ SYSTEM ASSUMPTIONS
 ### 3.8 — FORENSIC LOGGING
 
 Write debug logging code adapted to the user's actual stack.
-Place a log at **every unchecked assumption** from 3.5.
+Place a log at **every unchecked assumption** from 3.7.
 Make the bug prove itself. Never guess.
 
 **Core logging principle:** Log type + value + identity, not just value.
@@ -606,7 +608,7 @@ WHY 5: Why is there no documentation?
         → ROOT CAUSE: No onboarding guide for automation testing
                       standards across the team
 
-The Phase 3.7 verdict fixes the symptom (wrong click method).
+The Phase 3.9 verdict fixes the symptom (wrong click method).
 The 5 Whys root cause identifies what to fix so it never happens again.
 BOTH fixes should be provided.
 ```
@@ -738,7 +740,7 @@ Strip everything. Create the smallest possible failing case:
 - Use hardcoded inputs
 - Run in isolation (no DB, no network, no framework if possible)
 
-If it still fails in isolation → core logic bug. Reread 3.4-3.7.
+If it still fails in isolation → core logic bug. Reread 3.5-3.8.
 If it passes in isolation → bug is in the interaction, not the logic.
   → Add back one layer at a time until it breaks again.
   → The layer that breaks it = the culprit.
@@ -792,7 +794,7 @@ state it as a confirmed known bug with source link.
 13. **Keep an audit trail.** Every step: what I tried, what happened, what this means.
 14. **Apply 5 Whys after verdict.** The first answer is a symptom. The 5th Why is the root cause.
 15. **Meta-check first.** Verify the debugging setup before the code.
-16. **Search before concluding.** Phase 3.4 runs before forensic logs. Known bug = known fix.
+16. **Search before concluding.** Phase 3.6 runs before forensic logs. Known bug = known fix.
 17. **Exact versions required.** They unlock known-bug detection.
 18. **Docs trump assumptions.** Official docs say it works differently → code is wrong.
 19. **RFC is ground truth for protocols.** HTTP, OAuth, JWT, WebSocket, SMTP checked against spec.
