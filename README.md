@@ -48,9 +48,10 @@ nuclear-bug-fix/
 ├── benchmarks/                           # 100 benchmark cases plus suite metadata
 ├── scripts/
 │   ├── update.sh                         # In-place skill updater
-│   └── build_skill.py                    # Deterministic packaging and validation
+│   └── build_skill.py                    # Deterministic packaging, release manifest, and validation
 └── dist/
-    └── nuclear-bug-fix.skill
+    ├── nuclear-bug-fix.skill
+    └── release.json                      # Single source of truth for released version metadata
 ```
 
 **Current repo snapshot:** 8 reference files, 100 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
@@ -250,7 +251,7 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 | Benchmark cases present (100) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
-| Packaged version stamping | ✅ Pass |
+| Release manifest ↔ packaged version alignment | ✅ Pass |
 
 ---
 

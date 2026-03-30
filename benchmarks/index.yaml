@@ -1,41 +1,42 @@
 suite:
   name: nuclear-bug-fix-benchmarks
   version: 1
+  current_case_count: 100
   purpose: Measure first-shot bug-fix accuracy, false-positive rate, and verification quality.
 
 tracks:
   - id: bohrbug-core
     description: Deterministic, reproducible, one-primary-cause bugs.
-    target_cases: 40
+    current_cases: 36
   - id: regression-version
     description: Dependency, browser, runtime, or documented behavior change regressions.
-    target_cases: 20
+    current_cases: 7
   - id: deploy-env
     description: Wrong code running, stale assets, env drift, config mismatch, partial rollout.
-    target_cases: 20
+    current_cases: 29
   - id: intermittent-race
     description: Timing, concurrency, startup, flaky test, and load-amplified failures.
-    target_cases: 20
+    current_cases: 19
   - id: distributed-multi-factor
     description: Queues, webhooks, gateways, sagas, replica lag, and multi-service interactions.
-    target_cases: 20
+    current_cases: 9
   - id: evidence-limited
-    description: Only logs, partial code, symptom text, or stack trace available.
-    target_cases: 20
+    description: Only logs, partial code, symptom text, or stack trace available. Not yet represented in the committed corpus.
+    current_cases: 0
 
 domains:
   - id: frontend
-    target_cases: 30
+    current_cases: 29
   - id: backend
-    target_cases: 30
+    current_cases: 31
   - id: integration
-    target_cases: 30
+    current_cases: 20
   - id: mobile
-    target_cases: 20
+    current_cases: 2
   - id: general
-    target_cases: 25
+    current_cases: 11
   - id: version-external-intelligence
-    target_cases: 20
+    current_cases: 7
 
 scoring:
   first_shot_resolution: 40

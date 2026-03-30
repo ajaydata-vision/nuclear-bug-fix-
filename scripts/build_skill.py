@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -26,6 +27,7 @@ FORBIDDEN_PREFIXES = (
     "evals/",
 )
 VERSION_PATTERN = re.compile(r"(^\s{1,4}version:\s*)\S+", re.MULTILINE)
+DEFAULT_RELEASE_ARTIFACT = f"dist/{SKILL_NAME}.skill"
 
 
 def git_tracked_files() -> list[Path]:
@@ -67,6 +69,94 @@ def patch_version(skill_text: str, version: str) -> str:
     return updated
 
 
+def extract_skill_version(skill_text: str) -> str:
+    match = re.search(r"^\s{1,4}version:\s*(\S+)", skill_text, re.MULTILINE)
+    if not match:
+        raise ValueError("Packaged SKILL.md is missing metadata.version")
+    return match.group(1)
+
+
+def stamp_skill_file(skill_md_path: Path, version: str) -> None:
+    skill_md_path.write_text(
+        patch_version(skill_md_path.read_text(encoding="utf-8"), version),
+        encoding="utf-8",
+    )
+    print(f"Stamped {skill_md_path} with version {version}")
+
+
+def resolve_git_metadata(version: str) -> dict[str, str]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "show", "-s", "--format=%H%n%h%n%cs%n%s", version],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return {
+            "source_commit": version,
+            "version": version,
+            "source_date": "",
+            "source_subject": "",
+        }
+
+    lines = result.stdout.splitlines()
+    if len(lines) < 4:
+        raise ValueError(f"Could not resolve git metadata for version {version}")
+
+    return {
+        "source_commit": lines[0],
+        "version": lines[1],
+        "source_date": lines[2],
+        "source_subject": lines[3],
+    }
+
+
+def repo_relative_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+def write_release_manifest(output_path: Path, version: str, artifact: str) -> None:
+    metadata = resolve_git_metadata(version)
+    manifest = {
+        "skill": SKILL_NAME,
+        "version": metadata["version"],
+        "source_commit": metadata["source_commit"],
+        "source_date": metadata["source_date"],
+        "source_subject": metadata["source_subject"],
+        "artifact": artifact,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {output_path} (version {manifest['version']})")
+
+
+def load_release_manifest(manifest_path: Path) -> dict[str, str]:
+    if not manifest_path.exists():
+        raise ValueError(f"Release manifest does not exist: {manifest_path}")
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid release manifest JSON: {manifest_path}") from exc
+
+    required_keys = ("skill", "version", "artifact")
+    missing = [key for key in required_keys if key not in manifest]
+    if missing:
+        raise ValueError(f"Release manifest missing required keys: {', '.join(missing)}")
+
+    if manifest["skill"] != SKILL_NAME:
+        raise ValueError(
+            f"Release manifest skill mismatch: expected {SKILL_NAME}, found {manifest['skill']}"
+        )
+
+    return manifest
+
+
 def build_archive(output_path: Path, version: str | None) -> None:
     tracked_files = []
     for rel_path in sorted(path.as_posix() for path in git_tracked_files()):
@@ -96,9 +186,30 @@ def build_archive(output_path: Path, version: str | None) -> None:
     print(f"Built {output_path} ({output_path.stat().st_size:,} bytes, {len(tracked_files)} files)")
 
 
-def validate_archive(archive_path: Path, expected_version: str | None, max_size_bytes: int | None) -> None:
+def validate_archive(
+    archive_path: Path,
+    expected_version: str | None,
+    max_size_bytes: int | None,
+    manifest_path: Path | None,
+) -> None:
     if not archive_path.exists():
         raise ValueError(f"Archive does not exist: {archive_path}")
+
+    if manifest_path is not None:
+        manifest = load_release_manifest(manifest_path)
+        manifest_version = manifest["version"]
+        if expected_version is None:
+            expected_version = manifest_version
+        elif expected_version != manifest_version:
+            raise ValueError(
+                f"Release manifest version mismatch: expected {expected_version}, found {manifest_version}"
+            )
+
+        archive_rel_path = repo_relative_path(archive_path)
+        if manifest["artifact"] != archive_rel_path:
+            raise ValueError(
+                f"Release manifest artifact mismatch: expected {archive_rel_path}, found {manifest['artifact']}"
+            )
 
     if max_size_bytes is not None and archive_path.stat().st_size > max_size_bytes:
         raise ValueError(
@@ -130,10 +241,7 @@ def validate_archive(archive_path: Path, expected_version: str | None, max_size_
             raise ValueError("Packaged SKILL.md is missing the skill name")
 
         if expected_version is not None:
-            match = re.search(r"^\s{1,4}version:\s*(\S+)", skill_text, re.MULTILINE)
-            if not match:
-                raise ValueError("Packaged SKILL.md is missing metadata.version")
-            actual_version = match.group(1)
+            actual_version = extract_skill_version(skill_text)
             if actual_version != expected_version:
                 raise ValueError(
                     f"Packaged SKILL.md version mismatch: expected {expected_version}, found {actual_version}"
@@ -146,13 +254,34 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build and validate the nuclear-bug-fix skill archive")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    stamp_parser = subparsers.add_parser("stamp-version", help="Stamp metadata.version in SKILL.md")
+    stamp_parser.add_argument("--skill-md", required=True, type=Path, help="Path to SKILL.md")
+    stamp_parser.add_argument("--version", required=True, help="Version string to stamp into SKILL.md")
+
     build_parser = subparsers.add_parser("build", help="Build the .skill archive from tracked files")
     build_parser.add_argument("--output", required=True, type=Path, help="Archive output path")
     build_parser.add_argument("--version", help="Version string to stamp into the packaged SKILL.md")
 
+    manifest_parser = subparsers.add_parser(
+        "write-release-manifest",
+        help="Write the release manifest used by CI and the updater",
+    )
+    manifest_parser.add_argument("--output", required=True, type=Path, help="Manifest output path")
+    manifest_parser.add_argument("--version", required=True, help="Released source version")
+    manifest_parser.add_argument(
+        "--artifact",
+        default=DEFAULT_RELEASE_ARTIFACT,
+        help="Repo-relative path to the built .skill artifact",
+    )
+
     validate_parser = subparsers.add_parser("validate", help="Validate a built .skill archive")
     validate_parser.add_argument("--archive", required=True, type=Path, help="Archive path")
     validate_parser.add_argument("--expected-version", help="Expected metadata.version inside the archive")
+    validate_parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Release manifest path to treat as the version source of truth",
+    )
     validate_parser.add_argument(
         "--max-size-bytes",
         type=int,
@@ -165,10 +294,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     try:
-        if args.command == "build":
+        if args.command == "stamp-version":
+            stamp_skill_file(args.skill_md, args.version)
+        elif args.command == "build":
             build_archive(args.output, args.version)
+        elif args.command == "write-release-manifest":
+            write_release_manifest(args.output, args.version, args.artifact)
         elif args.command == "validate":
-            validate_archive(args.archive, args.expected_version, args.max_size_bytes)
+            validate_archive(args.archive, args.expected_version, args.max_size_bytes, args.manifest)
         else:
             raise ValueError(f"Unsupported command: {args.command}")
     except (subprocess.CalledProcessError, ValueError) as exc:

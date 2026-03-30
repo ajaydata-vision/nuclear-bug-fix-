@@ -9,8 +9,8 @@ REPO_NAME="nuclear-bug-fix-"
 SKILL_NAME="nuclear-bug-fix"
 SKILLS_DIR="${HOME}/.claude/skills/${SKILL_NAME}"
 SKILL_MD="${SKILLS_DIR}/SKILL.md"
-DIST_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/dist/${SKILL_NAME}.skill"
-COMMITS_API="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits/main"
+DEFAULT_ARTIFACT="dist/${SKILL_NAME}.skill"
+RELEASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/dist/release.json"
 COMPARE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/compare"
 
 # ── 1. Read installed version from metadata block in SKILL.md ────────────────
@@ -30,39 +30,42 @@ fi
 echo "nuclear-bug-fix updater"
 echo "  Installed : ${installed_version}"
 
-# ── 2. Fetch latest commit from GitHub ───────────────────────────────────────
-echo "  Checking  : GitHub (main branch)..."
+# ── 2. Fetch latest released version from GitHub ─────────────────────────────
+echo "  Checking  : GitHub release manifest..."
 
-api_response=$(curl -sf \
-  -H "Accept: application/vnd.github.v3+json" \
-  "${COMMITS_API}") || {
+release_response=$(curl -sf \
+  -H "Accept: application/json" \
+  "${RELEASE_URL}") || {
   echo ""
-  echo "❌ Could not reach GitHub. Check your network connection."
+  echo "❌ Could not fetch dist/release.json from GitHub."
   echo "   Manual install:"
-  echo "     curl -L ${DIST_URL} -o /tmp/${SKILL_NAME}.skill"
+  echo "     curl -L https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${DEFAULT_ARTIFACT} -o /tmp/${SKILL_NAME}.skill"
   echo "     claude skills add /tmp/${SKILL_NAME}.skill --force"
   exit 1
 }
 
 if ! command -v python3 &>/dev/null; then
-  echo "❌ python3 is required to parse the GitHub API response but was not found in PATH."
+  echo "❌ python3 is required to parse dist/release.json but was not found in PATH."
   echo "   Install python3 or use the manual install command:"
-  echo "     curl -L ${DIST_URL} -o /tmp/${SKILL_NAME}.skill"
+  echo "     curl -L https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${DEFAULT_ARTIFACT} -o /tmp/${SKILL_NAME}.skill"
   echo "     claude skills add /tmp/${SKILL_NAME}.skill --force"
   exit 1
 fi
 
-latest_full=$(echo "$api_response" | python3 -c \
-  "import sys,json; print(json.load(sys.stdin)['sha'])" 2>/dev/null) || {
-  echo "❌ Unexpected GitHub API response. Try again later."; exit 1
+latest_short=$(echo "$release_response" | python3 -c \
+  "import sys,json; print(json.load(sys.stdin)['version'])" 2>/dev/null) || {
+  echo "❌ Unexpected release manifest. Try again later."; exit 1
 }
-latest_short="${latest_full:0:7}"
-latest_date=$(echo "$api_response" | python3 -c \
-  "import sys,json; print(json.load(sys.stdin)['commit']['committer']['date'][:10])" 2>/dev/null \
+latest_date=$(echo "$release_response" | python3 -c \
+  "import sys,json; print(json.load(sys.stdin).get('source_date', ''))" 2>/dev/null \
   || echo "")
-latest_msg=$(echo "$api_response" | python3 -c \
-  "import sys,json; print(json.load(sys.stdin)['commit']['message'].splitlines()[0][:70])" 2>/dev/null \
+latest_msg=$(echo "$release_response" | python3 -c \
+  "import sys,json; print(json.load(sys.stdin).get('source_subject', '')[:70])" 2>/dev/null \
   || echo "")
+artifact_path=$(echo "$release_response" | python3 -c \
+  "import sys,json; print(json.load(sys.stdin).get('artifact', '${DEFAULT_ARTIFACT}'))" 2>/dev/null \
+  || echo "${DEFAULT_ARTIFACT}")
+DIST_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${artifact_path}"
 
 echo "  Latest    : ${latest_short}  ${latest_date:+(${latest_date})}"
 
@@ -93,11 +96,31 @@ curl -sf -L "${DIST_URL}" -o "${TMP}" || {
   rm -f "${TMP}"; exit 1
 }
 
-# Sanity check — .skill is a zip; verify it contains a valid SKILL.md
-unzip -p "${TMP}" nuclear-bug-fix/SKILL.md 2>/dev/null | grep -q "name: nuclear-bug-fix" || {
+# Sanity check — .skill is a zip; verify it contains a valid SKILL.md and matches release.json
+packaged_skill_md=$(unzip -p "${TMP}" "${SKILL_NAME}/SKILL.md" 2>/dev/null) || {
+  echo "❌ Downloaded file invalid (missing ${SKILL_NAME}/SKILL.md). Aborting."
+  rm -f "${TMP}"; exit 1
+}
+
+echo "$packaged_skill_md" | grep -q "name: ${SKILL_NAME}" || {
   echo "❌ Downloaded file invalid (not a valid skill archive or missing skill name). Aborting."
   rm -f "${TMP}"; exit 1
 }
+
+downloaded_version=$(echo "$packaged_skill_md" | awk '
+  /^[[:space:]]+version:/ {
+    gsub(/["'\''"]/, "", $2)
+    print $2
+    exit
+  }
+')
+
+if [[ -z "$downloaded_version" || "$downloaded_version" != "$latest_short" ]]; then
+  echo "❌ Downloaded archive version mismatch."
+  echo "   release.json: ${latest_short}"
+  echo "   archive:      ${downloaded_version:-missing}"
+  rm -f "${TMP}"; exit 1
+fi
 
 # ── 6. Install ────────────────────────────────────────────────────────────────
 echo "   Installing..."
