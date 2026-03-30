@@ -28,6 +28,42 @@ The methodology is universal.
 
 ---
 
+## PHASE 0 — REPRODUCE FIRST (Before Everything Else)
+
+**You cannot debug what you cannot reproduce. This is non-negotiable.**
+
+Debugging is an art only when you can't reproduce the bug. Until you can make it fail on demand, you are guessing — not debugging.
+
+```
+Step 1: Can you make it fail RIGHT NOW, on demand?
+  YES → Proceed to Phase 1 intake. You have a Bohrbug.
+  NO  → This is a Heisenbug, Mandelbug, or one-time event.
+        Go to Phase 2D Bug Classification immediately.
+
+Step 2: Stimulate — do NOT simulate.
+  STIMULATE = Use the real environment, real data, real conditions.
+              Reproduce in staging that mirrors prod exactly.
+  SIMULATE  = Use mocks, stubs, fake data, simplified conditions.
+              This is DANGEROUS. A simulated failure is not the real bug.
+              The fix will not work in production.
+
+Step 3: Find the exact conditions.
+  What input? What user? What load? What time? What sequence of actions?
+  The more specific the reproduction steps, the faster the fix.
+  Vague repro = vague fix = doesn't hold in production.
+
+Step 4: Preserve evidence IMMEDIATELY.
+  Before touching anything:
+  □ Export logs NOW (containers recycle, logs rotate, auto-scaling destroys evidence)
+  □ Capture metrics/traces for the failure window
+  □ Take screenshots/recordings of the failure
+  □ Export DB state if relevant
+  □ Note exact timestamp of failure
+  Evidence lost = bug takes 10x longer to fix.
+```
+
+---
+
 ## PHASE 1 — INTAKE
 
 Before diagnosing, collect context in ONE message.
@@ -98,9 +134,65 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
-Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both.
+### 2D — Bug Classification (Critical — Determines Entire Strategy)
 
-### 2B — Symptom-to-Category Map
+Different bug types require completely different debugging strategies.
+Identify the bug type before choosing any approach.
+
+```
+BOHRBUG  — Deterministic. Reproducible. Same input → same failure.
+           Strategy: Standard. Use Phases 3–6 as written.
+           Sign: "It always fails when I do X"
+
+HEISENBUG — Disappears or changes when observed/debugged.
+            Cause: Race condition, timing, debugger alters execution,
+                   uninitialized variable, optimizer changes behavior,
+                   debug mode vs release mode difference.
+            Strategy: DO NOT USE DEBUGGER BREAKPOINTS.
+                      Use non-invasive logging only (no pausing execution).
+                      Reproduce under production-equivalent load and timing.
+                      Run the test 100+ times and look for the pattern.
+                      Focus: async timing, shared state, memory, init order.
+            Sign: "It disappears when I try to debug it"
+
+MANDELBUG — Chaotic. Fixing one thing reveals two more bugs.
+            Cause: System grown without design over years.
+                   State space so large it cannot be reproduced reliably.
+                   Multiple interacting subsystems, no clear ownership.
+            Strategy: STOP trying to fix individual symptoms.
+                      Map the full system. Draw the dependency graph.
+                      Find the architectural flaw, not the code flaw.
+                      A workaround may be the right answer, not a fix.
+            Sign: "Every fix makes it worse or reveals new bugs"
+
+SCHROEDINBUG — Worked until someone read the code and saw it shouldn't.
+               Cause: Lucky undefined behavior. Accidental correctness.
+                      Code that cannot work in theory but worked in practice
+                      until conditions changed (load, data, version).
+               Strategy: The code IS wrong. It worked by accident.
+                         Don't try to preserve the old behavior.
+                         Rewrite the section correctly from scratch.
+               Sign: "I was reading the code and realized it can't possibly work"
+```
+
+### 2E — Contributing Factor Analysis
+
+The median production incident involves 3.5 contributing factors. Incidents with 5+ contributing factors take 3x longer to resolve.
+
+Before diagnosing, ask: Is this ONE bug or a convergence of factors?
+
+```
+Single factor:  One line is wrong. Standard Phase 3.
+Multi-factor:   Multiple conditions had to align to cause this.
+                Example: High load AND specific input AND cache miss AND
+                         connection pool at limit = all four required.
+
+If multi-factor: Map ALL contributing factors before fixing any one.
+Fixing factor 1 alone will not fix the bug.
+You need to find and address the convergence point.
+```
+
+---
 
 | Symptom Signal | Root Cause Category |
 |---|---|
@@ -181,6 +273,24 @@ Before diagnosing the code, verify the debugging setup itself is not lying:
 ## PHASE 3 — ADVERSARIAL DIAGNOSIS
 
 Execute in this exact order. Do not skip any step.
+
+### 3.0 — CHECK THE PLUG (Obvious First)
+
+Before any sophisticated diagnosis, check the embarrassingly obvious:
+```
+□ Is the service/server actually running?
+□ Is it connected to the right database/network?
+□ Are the credentials/secrets actually set?
+□ Is the correct PORT open and reachable?
+□ Is the correct ENVIRONMENT being targeted?
+□ Has the code been DEPLOYED (not just committed)?
+□ Has the process been RESTARTED after config changes?
+□ Is there DISK SPACE available?
+□ Is there enough MEMORY available?
+
+These take 30 seconds to check.
+Engineers waste 4 hours on sophisticated diagnosis before checking these.
+```
 
 ### 3.1 — ASSUME EVERYONE WAS WRONG
 
@@ -429,11 +539,81 @@ AFTER:
 WHY THIS FIX WORKS: [one sentence]
 ```
 
-Do not rewrite the whole file. Fix only the broken lines.
+### 3.8 — 5 WHYS (After Initial Verdict — Find the Real Root Cause)
 
----
+The first answer is rarely the root cause. It is a symptom.
+Apply 5 Whys to dig to the actual cause underneath the cause.
 
-## PHASE 4 — DEEP PATTERN REFERENCE (Domain Router)
+```
+Format:
+WHY 1: Why did the bug occur?
+        → [immediate cause]
+WHY 2: Why did [immediate cause] happen?
+        → [deeper cause]
+WHY 3: Why did [deeper cause] happen?
+        → [deeper still]
+WHY 4: Why did [deeper still] happen?
+        → [systemic cause]
+WHY 5: Why did [systemic cause] happen?
+        → [ROOT CAUSE — usually a process, design, or knowledge failure]
+
+Example:
+WHY 1: Why did the date picker not set the date?
+        → Selenium click fired but Angular didn't detect it
+WHY 2: Why didn't Angular detect the click?
+        → Native DOM event fired outside Angular's NgZone
+WHY 3: Why was a native DOM event used?
+        → Developer assumed .click() works with all frameworks
+WHY 4: Why did developer assume this?
+        → No team documentation on framework-specific automation
+WHY 5: Why is there no documentation?
+        → ROOT CAUSE: No onboarding guide for automation testing
+                      standards across the team
+
+The Phase 3.7 verdict fixes the symptom (wrong click method).
+The 5 Whys root cause identifies what to fix so it never happens again.
+BOTH fixes should be provided.
+```
+
+### 3.9 — CHANGE ONE THING AT A TIME
+
+When applying fixes — especially during escalation:
+```
+NEVER change two things simultaneously.
+If the bug disappears, you won't know which change fixed it.
+If the bug changes behavior, you won't know what caused the change.
+
+Protocol:
+1. Apply ONE change
+2. Test under EXACT reproduction conditions from Phase 0
+3. Document result (fixed / not fixed / changed behavior)
+4. If not fixed: REVERT that change completely
+5. Apply NEXT change
+6. Repeat
+
+This is the only way to isolate what actually fixed it.
+This is also how you avoid: "it's fixed" → bug returns in 2 days.
+```
+
+### 3.10 — AUDIT TRAIL
+
+Keep a running log of every debugging step. This is not optional.
+
+```
+Format for each step:
+[TIMESTAMP] HYPOTHESIS: [what you thought]
+[TIMESTAMP] ACTION: [what you did / changed]
+[TIMESTAMP] OBSERVATION: [what happened]
+[TIMESTAMP] CONCLUSION: [what this proves or eliminates]
+
+Why this matters:
+1. You won't repeat dead paths (common to circle back after 3 hours)
+2. If someone else takes over, they don't start from zero
+3. It becomes the basis for the postmortem / blameless review
+4. Pattern in failed attempts often points directly to root cause
+```
+
+--- — DEEP PATTERN REFERENCE (Domain Router)
 
 Load the reference file(s) matching the domain identified in Phase 2A.
 Always load ALL files relevant to the bug — never just one if multiple apply.
@@ -443,7 +623,7 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 | `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing bug | Rendering, hydration, state, CSS, forms, WebSocket, PWA, browser compat |
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
-| `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
+| `references/world-methods.md` | Heisenbug/Mandelbug identified, bug > 1hr unsolved, multi-factor, postmortem needed | Agans' 9 Rules, Bug taxonomy, 5 Whys, Fishbone, Fault Tree, SRE postmortem, Chaos testing |
 
 Each reference file has: symptom → why → how to prove → how to fix.
 Load them. Read them. Match the pattern. Do not guess.
@@ -470,9 +650,12 @@ VERIFICATION CHECKLIST
    □ Test with: null input, empty input, max value, min value
    □ Test the exact scenario that was broken before
 
-4. IF STILL FAILING
-   □ Next suspect: [second most likely from 3.1]
-   □ Add this specific log to narrow it further: [exact log statement]
+4. BLAMELESS MICRO-POSTMORTEM (for any bug that took > 1 hour)
+   □ What was the root cause? (from 5 Whys)
+   □ What could have caught this earlier?
+   □ What will prevent this class of bug permanently?
+   □ What test should be added to the regression suite?
+   Document this. Don't skip it. It's how the team gets smarter.
 ```
 
 ---
@@ -548,21 +731,32 @@ state it as a confirmed known bug with source link.
 
 ## IRONCLAD RULES
 
-1. **Fix only what is broken.** Never rewrite the whole file.
-2. **Never revisit closed paths.** Already tried = dead path. Move on.
-3. **One verdict.** Not a hedge list. Commit to the answer.
-4. **Always BEFORE / AFTER.** Never just the new code alone.
-5. **Forensic sentinel log.** Every fix gets a sentinel log to confirm it runs.
-6. **Never assume.** Every assumption gets a log or assertion.
-7. **Meta-check first.** Always verify the debugging setup before the code.
-8. **Search before concluding.** Always run Phase 3.4 before writing forensic logs. A known bug has a known fix.
-9. **Exact versions matter.** Never accept "latest" — extract exact version numbers. They unlock known-bug detection.
-10. **Docs trump assumptions.** If official docs say it works differently → the code is wrong, not the docs.
-11. **RFC is ground truth for protocols.** HTTP, OAuth, JWT, WebSocket, SMTP bugs must be checked against the RFC.
-12. **Intermittent?** Only: async timing, shared state, race conditions, resource exhaustion.
-13. **Silent failure?** Find the swallow. Something is catching and dropping the error.
-14. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
-15. **State not updating?** Find the interception layer between action and handler.
-16. **Fix didn't work?** Run Phase 6. Do not repeat Phase 3 with the same assumptions.
-17. **Two different symptoms?** Two bugs. Treat them separately.
-18. **Recent change caused it?** The delta is the bug. Diff it. Revert it. Prove it.
+1. **Reproduce first.** You cannot debug what you cannot reproduce. No repro = no fix.
+2. **Stimulate, never simulate.** Real environment, real data, real conditions. Always.
+3. **Preserve evidence immediately.** Logs, metrics, DB state before they're lost.
+4. **Classify the bug type.** Bohrbug, Heisenbug, Mandelbug, Schroedinbug. Each needs a different strategy.
+5. **Check the plug first.** 30 seconds on obvious checks before 4 hours of sophisticated analysis.
+6. **Fix only what is broken.** Never rewrite the whole file.
+7. **Never revisit closed paths.** Already tried = dead path. Move on.
+8. **One verdict.** Not a hedge list. Commit to the answer.
+9. **Always BEFORE / AFTER.** Never just the new code alone.
+10. **Sentinel log in every fix.** Confirm the fix is actually running.
+11. **Never assume.** Every assumption gets a log or assertion.
+12. **Change one thing at a time.** Two changes = you don't know what fixed it.
+13. **Keep an audit trail.** Every step: what I tried, what happened, what this means.
+14. **Apply 5 Whys after verdict.** The first answer is a symptom. The 5th Why is the root cause.
+15. **Meta-check first.** Verify the debugging setup before the code.
+16. **Search before concluding.** Phase 3.4 runs before forensic logs. Known bug = known fix.
+17. **Exact versions required.** They unlock known-bug detection.
+18. **Docs trump assumptions.** Official docs say it works differently → code is wrong.
+19. **RFC is ground truth for protocols.** HTTP, OAuth, JWT, WebSocket, SMTP checked against spec.
+20. **Heisenbug? No breakpoints.** Use non-invasive logging only. Production timing only.
+21. **Mandelbug? Stop patching.** Map the architecture. Fix the design, not the symptom.
+22. **If you didn't fix it, it ain't fixed.** Must fail under old conditions. Must pass after fix. Same conditions.
+23. **Intermittent?** Only: async timing, shared state, race conditions, resource exhaustion.
+24. **Silent failure?** Find the swallow. Something is catching and dropping the error.
+25. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
+26. **Fix didn't work?** Run Phase 6. Do not repeat Phase 3 with the same assumptions.
+27. **Multi-factor incident?** Map ALL contributing factors before fixing any one.
+28. **Write the micro-postmortem.** Every bug > 1 hour gets: root cause, what would have caught it, what prevents recurrence.
+
