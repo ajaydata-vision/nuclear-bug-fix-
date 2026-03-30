@@ -206,3 +206,75 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Why:** Endpoint not publicly accessible. Wrong URL registered. Signature validation rejecting all webhooks. SSL issue. Endpoint returning non-2xx (external service stops retrying).
 **Prove:** Check external service's webhook delivery logs — is it showing success or failure? What response code is it getting?
 **Fix:** Ensure endpoint is publicly accessible. Return 200 immediately, process async. Fix signature validation. Use webhook testing tools (ngrok for local dev).
+
+---
+
+## CATEGORY 10 — CONNECTION POOLING
+
+### Pattern: Requests time out under load but succeed at low traffic
+**Symptom:** API works at low traffic. Under load, requests queue and time out. DB CPU normal. App CPU normal. Pool queue length grows continuously.
+**Why:** Pool exhausted. Slow queries hold connections for their full duration. Max throughput = pool_size ÷ avg_query_duration. Any traffic above this queues indefinitely.
+**Prove:** Log pool queue length every 5 seconds under load. Log query duration per DB call. Calculate: connections × avg query time = throughput ceiling. Compare to actual request rate.
+**Fix:** Optimise slow queries first (indexes, reduce result set). Tune pool size to match DB `max_connections`. Set pool acquisition timeout so queued requests fail fast rather than waiting silently. Consider read replicas for read-heavy workloads.
+
+### Pattern: Connection pool exhausted with only a handful of active requests
+**Symptom:** Pool exhausted even with 3-5 concurrent requests. Pool size is 20. Idle count trends downward over time without recovering.
+**Why:** Connections acquired and never released. Missing `finally` block — exception path skips `client.release()`. Long-running transactions holding connections. Leak accumulates over hours.
+**Prove:** Log pool stats (total, idle, waiting) on every request entry and exit. Idle count should return to pre-request level after each request completes. Trending downward = leak.
+**Fix:** Always release in `finally` block or use a pool wrapper that guarantees release. Never acquire a connection outside try/finally. Set a connection timeout so leaked connections are reclaimed automatically.
+
+### Pattern: Increasing pool size does not improve performance
+**Symptom:** Pool size raised from 10 to 50. Timeouts persist. DB shows more connections but same wait time. DB CPU increases.
+**Why:** DB itself is the bottleneck. Beyond the DB's optimal concurrency, more connections cause lock contention and context-switch overhead — hurting not helping.
+**Prove:** Check DB CPU and I/O while adding connections. Run `SHOW max_connections` and `SELECT count(*) FROM pg_stat_activity` (Postgres). DB CPU rising with pool size = DB saturation.
+**Fix:** Pool size ≠ throughput. Optimise queries. Cache hot reads. Batch writes. For Postgres: optimal pool size is often `(2 × CPU cores) + spindle_count` — not an arbitrary large number.
+
+---
+
+## CATEGORY 11 — DISTRIBUTED LOCKING
+
+### Pattern: Critical section executed by two processes simultaneously
+**Symptom:** Two workers process the same job. Duplicate charges, records, or data corruption. Only under concurrent load with multiple instances.
+**Why:** No mutual exclusion. Read-check-write is not atomic: both processes read the same state before either writes. Classic TOCTOU race.
+**Prove:** Log `hostname + pid + timestamp` at the start of the critical section. Two log entries within milliseconds from different hosts = race confirmed.
+**Fix:** Use `SELECT FOR UPDATE SKIP LOCKED` (Postgres) to atomically claim a row — only the row that is claimed gets processed. Or Redis `SET key value NX EX ttl` — atomic set-if-not-exists with expiry. Only one process succeeds.
+
+### Pattern: Distributed lock acquired but never released — permanent block
+**Symptom:** Operation permanently blocked. Redis/DB shows a lock key that never expires. The process that set it crashed.
+**Why:** Lock set without TTL. A crashed process cannot release what it holds. Without TTL, the lock persists until manually deleted.
+**Prove:** `redis-cli TTL lock:key` returns -1 (no expiry) = permanent lock. Check when the key was created vs when the holding process died.
+**Fix:** Always set the lock atomically with expiry: `SET lock:key value NX EX 30`. TTL must be longer than the maximum expected operation duration. Add a stale lock alert: if a lock is older than 2× its expected duration, page someone.
+
+### Pattern: Lock expires while operation still running — two holders simultaneously
+**Symptom:** TTL set to 30 seconds. Operation sometimes runs 35 seconds. Second process acquires the lock while first still holds it. Data corruption follows.
+**Why:** TTL shorter than the P99 operation duration. Lock expires, second process acquires it, both run simultaneously.
+**Prove:** Log operation start and end time. Compare to lock TTL. Any run exceeding TTL = unsafe window.
+**Fix:** Set TTL to 3× P99 operation duration. Implement lock heartbeat: holding process extends TTL every N seconds while still running (`EXPIRE lock:key ttl`). Use Redlock for multi-node Redis.
+
+---
+
+## CATEGORY 12 — SECURITY PATTERNS
+
+### Pattern: Session fixation — attacker hijacks session after login
+**Symptom:** After login, the session ID is identical to the pre-login session ID. An attacker who planted that session ID can now access the authenticated session.
+**Why:** Session ID not regenerated on privilege escalation. The existing session is reused with elevated privileges attached.
+**Prove:** Log session ID before and after `POST /login`. If identical → vulnerable.
+**Fix:** Call `session.regenerate()` immediately on successful login. New session ID must be different and unpredictable. Old session must be invalidated. This is a one-line fix in express-session.
+
+### Pattern: CSRF attack succeeds on state-changing endpoint
+**Symptom:** Authenticated endpoint triggerable from a third-party site via form or fetch. No CSRF token required. Browser sends cookies automatically.
+**Why:** Without a CSRF token or SameSite cookie, any site can forge requests as the authenticated user. Browser cookie policy is the only gate — and it's insufficient for legacy SameSite=None.
+**Prove:** From a different origin, submit a form targeting the API endpoint. Does it succeed?
+**Fix:** Use `SameSite=Strict` or `SameSite=Lax` cookies. For APIs: require a CSRF token in a custom header (`X-CSRF-Token`) that cannot be set cross-origin. Or use the Double Submit Cookie pattern.
+
+### Pattern: JWT algorithm confusion — HS256 vs RS256 auth bypass
+**Symptom:** Tokens signed with RS256 (asymmetric) accepted when re-signed with HS256 using the server's public key as the HMAC secret. Critical auth bypass.
+**Why:** Server accepts multiple algorithms. Attacker signs a forged token with HS256 using the public key (which is public) as the secret. Server validates it as HS256 and accepts it.
+**Prove:** Take the server's public key. Sign a forged JWT with HS256 using that key as HMAC secret. Does the server accept it?
+**Fix:** Specify exactly one expected algorithm in verification: `algorithms: ['RS256']` — never a list mixing HS256 and RS256. Reject tokens where `alg` header doesn't match. Never accept `alg: none`.
+
+### Pattern: IDOR — user accesses another user's data via ID manipulation
+**Symptom:** User A accesses User B's records by changing an ID in the URL or request body. No error returned. Authorization checks authentication but not ownership.
+**Why:** Endpoint verifies the user is logged in but never verifies the requested resource belongs to that user.
+**Prove:** Log in as User A. Note User A's resource IDs. Request a resource ID belonging to User B. Does it return data?
+**Fix:** After loading the resource, always verify `resource.ownerId === req.user.id`. Never trust client-supplied IDs for ownership. Default-deny: if ownership check is missing, deny the request.

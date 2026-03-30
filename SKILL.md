@@ -100,6 +100,11 @@ Step 1: Can you make it fail RIGHT NOW, on demand?
         After intake, go to Phase 2 (start from 2A).
         Phase 2D will classify the bug type after 2A/2B/2C routing runs.
 
+  FRONTEND BUG + chrome-devtools-mcp configured?
+  → Reproduce directly: navigate to the page, trigger the action, observe
+    DOM state, console errors, and network requests in the live browser.
+    Do not ask the user to describe it — see it yourself.
+
 Step 2: Stimulate — do NOT simulate.
   STIMULATE = Use the real environment, real data, real conditions.
               Reproduce in staging that mirrors prod exactly.
@@ -594,6 +599,14 @@ log("[DEBUG] ★★★ FIXED CODE EXECUTING v2 ★★★")
 # If you don't see this in output → wrong code is running
 ```
 
+**FRONTEND BUG + chrome-devtools-mcp configured?**
+Skip manual log injection. Use MCP tools directly:
+- Console errors → `console_messages`
+- Network request headers/response → `network_requests`
+- DOM state / computed styles → `get_page_source` or `evaluate_js`
+- JS expression evaluation → `evaluate_js`
+These give the same evidence as forensic logs without modifying the code.
+
 ### 3.9 — DIFFERENTIAL DIAGNOSIS GATE (Mandatory Before Verdict)
 
 > **Stuck before reaching this step?** If 2+ hours have passed with no clear hypothesis, jump directly to **3.13 — GET A FRESH VIEW** before running the gate.
@@ -922,6 +935,12 @@ VERIFICATION CHECKLIST
    □ What will prevent this class of bug permanently?
    □ What test should be added to the regression suite?
    Document this. Don't skip it. It's how the team gets smarter.
+
+5. FRONTEND BUG + chrome-devtools-mcp configured?
+   □ Navigate to the fixed page in the live browser
+   □ Trigger the exact failing scenario from Phase 0
+   □ Confirm: no console errors, network requests correct, DOM state correct
+   □ This replaces manual DevTools steps — verify directly, do not describe.
 ```
 
 ---
