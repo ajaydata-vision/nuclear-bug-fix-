@@ -30,7 +30,7 @@ echo "  Checking  : GitHub (main branch)..."
 
 api_response=$(curl -sf \
   -H "Accept: application/vnd.github.v3+json" \
-  "${COMMITS_API}" 2>&1) || {
+  "${COMMITS_API}") || {
   echo ""
   echo "❌ Could not reach GitHub. Check your network connection."
   echo "   Manual install:"
@@ -79,9 +79,10 @@ curl -sf -L "${DIST_URL}" -o "${TMP}" || {
   rm -f "${TMP}"; exit 1
 }
 
-# Sanity check
-grep -q "name: nuclear-bug-fix" "${TMP}" 2>/dev/null || {
-  echo "❌ Downloaded file invalid (missing skill name). Aborting."; rm -f "${TMP}"; exit 1
+# Sanity check — .skill is a zip; verify it contains a valid SKILL.md
+unzip -p "${TMP}" nuclear-bug-fix/SKILL.md 2>/dev/null | grep -q "name: nuclear-bug-fix" || {
+  echo "❌ Downloaded file invalid (not a valid skill archive or missing skill name). Aborting."
+  rm -f "${TMP}"; exit 1
 }
 
 # ── 6. Install ────────────────────────────────────────────────────────────────
