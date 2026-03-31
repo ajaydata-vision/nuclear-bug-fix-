@@ -66,11 +66,11 @@ def head_commit() -> str:
 
 
 def create_accessible_temp_root() -> Path:
-    parent = Path(tempfile.gettempdir()) / f"{SKILL_NAME}-updater-work"
+    parent = Path(tempfile.gettempdir()) / ".nbf-updater"
     parent.mkdir(parents=True, exist_ok=True)
 
     for _ in range(10):
-        candidate = parent / f"{SKILL_NAME}-updater-{uuid.uuid4().hex}"
+        candidate = parent / f"upd-{uuid.uuid4().hex[:12]}"
         try:
             candidate.mkdir()
             return candidate
@@ -313,7 +313,7 @@ def main() -> int:
     temp_root = create_accessible_temp_root()
     try:
         snapshot_dir = temp_root / "snapshot"
-        fake_home = temp_root / "Ajay Data Home"
+        fake_home = temp_root / "User Home"
         installed_dir = fake_home / ".claude" / "skills" / SKILL_NAME
         snapshot_dir.mkdir(parents=True, exist_ok=True)
 
