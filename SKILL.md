@@ -173,6 +173,16 @@ Extract answers from the conversation first — only ask for what is missing.
      Python 3.11.4 + Django 4.2.8 + Celery 5.3.4 + Redis 7.2
      Java 17 + Spring Boot 3.2.1 + Hibernate 6.4.1 + MySQL 8.0.36
    Also: OS, deployment method (Docker/bare metal/serverless/k8s).
+   Desktop / bridge / packaged apps must ALSO include runtime fingerprint:
+     source vs frozen, onefile vs onedir, PyInstaller version, Python version,
+     Node version, child-process command, current working directory, writable
+     data path, whether stdout is a protocol/data channel, and where logs go.
+   Required appendix for desktop / bridge / packaged apps:
+     PyInstaller spec/build command, collected-data/hidden-import inputs,
+     packaged helper/bundle manifest or extracted file tree, parent + child
+     version stamp, transport framing contract, clean-machine vs dev-machine
+     status, and one synchronized boundary timeline (spawn -> ready ->
+     listener attach -> first event / failure).
    Version numbers are not optional — they unlock known-bug detection.
 
 8. CONSISTENT OR INTERMITTENT?
@@ -197,13 +207,45 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | **Frontend** | UI not rendering, CSS broken, component state wrong, hydration error, bundle error, browser-only bug, routing broken, form not submitting, WebSocket UI issue | `references/frontend-patterns.md` |
 | **Mobile** | App crash, React Native bridge error, iOS/Android specific behavior, device permission, push notification, offline sync, memory warning on device | `references/frontend-patterns.md` + mobile section |
 | **Backend** | API response wrong, auth failing, DB issue, background job silent, queue not consumed, file upload broken, rate limit wrong, session bug, ORM query wrong | `references/backend-patterns.md` |
+| **Python Desktop/UI** | PyQt6 widget update wrong, qasync slot never resumes, UI freezes during network/file/email action, QObject thread affinity error, app hangs on exit, desktop websocket/scheduler interaction broken | `references/python-desktop-patterns.md` |
+| **Bridge / Adapter / Unofficial Client** | Python process talks to Node subprocess, stdout/stderr framed protocol, WhatsApp/Baileys bridge, websocket relay, scraper suddenly returns empty data, connected but no events, first event missing, duplicate event after reconnect | `references/bridge-adapter-patterns.md` |
+| **Frozen / Packaged Runtime** | Works from source, fails in `.exe`; PyInstaller onefile/onedir bug; bundled data missing; hidden import missing; child process or asset not found; writable path differs from dev | `references/windows-packaging-patterns.md` |
 | **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect | `references/java-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
 Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both.
+Desktop app spawning Node bridge from a packaged `.exe` usually means:
+- load `references/python-desktop-patterns.md`
+- load `references/bridge-adapter-patterns.md`
+- load `references/windows-packaging-patterns.md`
+- if timing-sensitive, also load `references/intermittent-race-bugs.md`
 
-### 2B — Symptom-to-Category Map
+Bridge / Adapter / Unofficial Client subrouter:
+- If the failure is spawn/handshake/listener/stdout framing/version-stamp/path related, treat it as local bridge / IPC first.
+- If there was no local code/deploy/version change and raw upstream status/content changed, treat it as provider drift first and load `references/external-intelligence.md` before local bridge surgery.
+
+### 2B — Boundary Ownership Matrix (Required For Desktop / Bridge / Frozen Bugs)
+
+Before PH/CH elimination, name the first boundary that actually diverges.
+
+| Boundary | What To Prove |
+|---|---|
+| UI loop | Event loop owner, blocking span, async-slot scheduling, task lifecycle |
+| Worker thread | Thread name/ID, cross-thread widget/QObject mutation, queue handoff |
+| Parent process | Spawn command, cwd, env, version stamp, resolved child path |
+| Child bridge | Ready/auth state, listener graph, version stamp, runtime path |
+| Transport | Framing contract, stdout/stderr ownership, sequence gaps, parse failures |
+| Frozen bundle | `_MEIPASS`, collected files/plugins, writable data path, clean-machine behavior |
+| Upstream provider | Raw status/body/signature, maintainer reports, provider drift evidence |
+
+Record four facts:
+- last known good boundary
+- first bad boundary
+- evidence required to prove it
+- next boundary to test if disproved
+
+### 2C — Symptom-to-Category Map
 
 | Symptom Signal | Root Cause Category |
 |---|---|
@@ -222,8 +264,12 @@ Multiple domains? Load ALL relevant files. Frontend bug calling backend API = lo
 | Logs show nothing, bug is real | Log level too high / logs going to wrong sink / error swallowed |
 | Fix applied, bug persists | Wrong code deployed / cache stale / fix in wrong branch |
 | Bug fixed, different bug appeared | Fix introduced regression / two bugs masking each other |
+| UI freezes while one action runs | Blocking I/O or CPU on UI/event-loop thread |
+| Connected bridge, but first events missing or duplicated | Handshake/listener timing bug or listener leak |
+| Works from source, fails in `.exe` | Frozen-runtime import/path/resource mismatch |
+| Scraper suddenly returns empty data after site change | Upstream/provider drift or anti-bot behavior, not parser logic alone |
 
-### 2C — Version Intelligence (Run After Domain Classification)
+### 2D — Version Intelligence (Run After Domain Classification)
 
 Extract exact versions from intake. Then run this check:
 
@@ -244,6 +290,9 @@ Known danger combinations:
 - Framework version incompatible with its plugin/extension version
 - Runtime version incompatible with native module
 - Node/Python/Java version below framework's minimum requirement
+- GUI framework version incompatible with event-loop adapter
+- Parent app protocol version incompatible with child bridge version
+- PyInstaller mode incompatible with runtime path assumptions
 
 **Step 3 — Trigger external search if:**
 - Error message contains a library name + version number
@@ -253,7 +302,7 @@ Known danger combinations:
 - Bug is security/auth related → check CVEs
 → Go to Phase 3.6 (External Intelligence) immediately
 
-### 2D — Bug Classification (Critical — Determines Entire Strategy)
+### 2E — Bug Classification (Critical — Determines Entire Strategy)
 
 Different bug types require completely different debugging strategies.
 
@@ -284,7 +333,7 @@ SCHROEDINBUG — Worked until someone read the code and saw it shouldn't.
                Sign: "I realized this code can't possibly work"
 ```
 
-### 2E — Contributing Factor Analysis
+### 2F — Contributing Factor Analysis
 
 The median production incident involves 3.5 contributing factors.
 Incidents with 5+ contributing factors take 3x longer to resolve.
@@ -296,7 +345,7 @@ Multi-factor:   Multiple conditions must align to trigger the bug.
                 Fixing factor 1 alone will not fix the bug.
 ```
 
-### 2F — Meta-Checks (Always Run Before Diagnosis)
+### 2G — Meta-Checks (Always Run Before Diagnosis)
 
 Before diagnosing the code, verify the debugging setup itself is not lying:
 
@@ -318,11 +367,23 @@ Before diagnosing the code, verify the debugging setup itself is not lying:
    - Test data different from production data?
    - Test running in isolation but bug is about interaction?
 
-4. **Is there more than one bug?**
+4. **For desktop / frozen apps: are you debugging the same runtime shape that fails?**
+   - Source run vs packaged `.exe`?
+   - `onefile` vs `onedir`?
+   - Same Python / Node / bridge build on both sides?
+   - Same working directory, writable data directory, and plugin paths?
+
+5. **For subprocess / bridge / adapter bugs: is the transport itself lying?**
+   - Is stdout reserved for protocol frames, or polluted by logs?
+   - Is the child process alive and on the expected version/build?
+   - Did the handshake complete before the first event was emitted?
+   - Are listeners registered once, or once per reconnect/restart?
+
+6. **Is there more than one bug?**
    - First bug masking second bug?
    - Fix for Bug A revealing Bug B (which was always there)?
 
-5. **Can you add logs / access the environment at all?**
+7. **Can you add logs / access the environment at all?**
    - If NO log access: rely primarily on external intelligence (Phase 3.6) and binary search (Phase 3.4). Still run the DDx Gate (3.9) — it operates on whatever evidence is available.
    - If NO code access: external intelligence becomes the primary diagnostic tool.
 
@@ -462,6 +523,8 @@ Load `references/external-intelligence.md` for the full source hierarchy and que
 □ Framework version is < 6 months old (possible unpatched bug)
 □ You cannot explain WHY the code should fail based on reading it alone
 □ The exact error message is cryptic or looks auto-generated by a library
+□ Works from source but fails only in a packaged / frozen build
+□ Stack uses an unofficial client, scraper, or provider bridge that may have upstream drift
 □ Stack trace or error references: jboss, wildfly, weblogic, glassfish, payara,
   liberty, or any proprietary EE container class — search vendor docs first
 □ Deployment descriptor is jboss-web.xml, weblogic.xml, glassfish-web.xml,
@@ -499,6 +562,27 @@ Load `references/external-intelligence.md` for the full source hierarchy and que
 7. MDN Web Docs / caniuse.com for browser APIs
    → Is the API supported in the browser where bug occurs?
    → Is there a known quirk in that browser's implementation?
+```
+
+**Search priority overrides for unstable desktop / bridge / packaged stacks:**
+```
+Unofficial client / scraper drift:
+1. Repo issues / maintainer reports / provider-change evidence
+2. Release notes / changelog for the scraper or client
+3. Raw upstream response comparison
+4. Only then local parser/business-logic diagnosis
+
+Packaged runtime:
+1. PyInstaller docs / hooks / collect-data guidance
+2. PyInstaller issue tracker for the exact error
+3. Framework-specific packaging notes (Qt/plugins, spawned helpers, cert/data paths)
+4. Only then generic runtime docs
+
+Bridge / child runtime / stdio protocol:
+1. Library repo docs/issues for lifecycle and reconnect behavior
+2. Transport framing contract and child_process / subprocess docs
+3. Parent/child version and packaged-path evidence
+4. Only then generic protocol RFCs
 ```
 
 **What to do with search results:**
@@ -572,6 +656,40 @@ Go:           log.Printf("[DEBUG] %T %+v", var, var)
 ```
 
 ```
+# Desktop / qasync / packaged runtime fingerprint
+import asyncio, logging, os, sys, threading
+from pathlib import Path
+log = logging.getLogger("nbf")
+loop = asyncio.get_running_loop()
+log.debug(
+    "[DEBUG] pid=%s tid=%s thread=%s loopId=%s frozen=%s meipass=%s cwd=%s exe=%s argv=%s",
+    os.getpid(),
+    threading.get_ident(),
+    threading.current_thread().name,
+    hex(id(loop)),
+    getattr(sys, "frozen", False),
+    getattr(sys, "_MEIPASS", ""),
+    os.getcwd(),
+    sys.executable,
+    sys.argv,
+)
+log.debug("[DEBUG] appdata=%s localappdata=%s home=%s", os.getenv("APPDATA"), os.getenv("LOCALAPPDATA"), str(Path.home()))
+```
+
+```
+# Bridge / stdio protocol safety
+# If stdout carries protocol frames, NEVER print logs there.
+# Use stderr or a file sink only.
+import logging, os, sys
+handler = logging.StreamHandler(sys.stderr)
+handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(message)s"))
+bridge_log = logging.getLogger("bridge")
+bridge_log.handlers = [handler]
+bridge_log.setLevel(logging.DEBUG)
+bridge_log.debug("bridge_seq=%s event=%s pid=%s child=%s", seq, event_name, os.getpid(), child_pid)
+```
+
+```
 # Async timing (add to every async boundary)
 log("[DEBUG] BEFORE async op, timestamp=" + now())
 result = await asyncOp()
@@ -610,6 +728,7 @@ screenshot("before_action.png")
 # Add a unique sentinel log line immediately after your fix
 log("[DEBUG] ★★★ FIXED CODE EXECUTING v2 ★★★")
 # If you don't see this in output → wrong code is running
+# If stdout is the protocol channel, write the sentinel to stderr or a file.
 ```
 
 **FRONTEND BUG + chrome-devtools-mcp configured?**
@@ -910,6 +1029,9 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 |---|---|---|
 | `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing/mobile bug | Rendering, hydration, state, CSS, forms, WebSocket, browser compat, performance |
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
+| `references/python-desktop-patterns.md` | PyQt6/qasync/UI-thread-affinity/desktop scheduler or websocket bugs | Loop ownership, async slots, UI freezes, shutdown cleanup, desktop SQLite usage |
+| `references/bridge-adapter-patterns.md` | Python<->Node bridges, stdout-framed protocols, reconnect/listener bugs, unofficial client/scraper drift | IPC lifecycle, framing discipline, reconnect ordering, provider drift handling |
+| `references/windows-packaging-patterns.md` | Works from source but fails when frozen / packaged | PyInstaller layout, `_MEIPASS`, hidden imports, Qt plugins, writable paths, bundled helpers |
 | `references/integration-patterns.md` | Any webhook/queue/pipeline/microservice bug | Webhooks, message queues, event-driven, ETL, CI/CD, API gateway, service mesh |
 | `references/bug-patterns.md` | Async, environment, encoding, type, memory, concurrency | 10 categories, 45 universal patterns |
 | `references/intermittent-race-bugs.md` | ANY intermittent failure, Heisenbug, race condition, flaky test, "only sometimes", "only under load" | Signature hunting, race window amplification, non-invasive logging, TSan tools, 8 race types with prove+fix, Fix Ladder, verification |
@@ -919,6 +1041,12 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 
 Each reference file has: symptom → why → how to prove → how to fix.
 Load them. Read them. Match the pattern. Do not guess.
+
+Co-loading rules for this stack family:
+- Desktop + Bridge: load `references/python-desktop-patterns.md` and `references/bridge-adapter-patterns.md`
+- Bridge + Frozen: load `references/bridge-adapter-patterns.md` and `references/windows-packaging-patterns.md`
+- Desktop + Bridge + Frozen: load all three, plus `references/intermittent-race-bugs.md` if timing-sensitive
+- Provider drift with no local change: load `references/bridge-adapter-patterns.md` and `references/external-intelligence.md` before local IPC/path debugging
 
 ---
 

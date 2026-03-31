@@ -143,6 +143,26 @@ Reference this list when generating competing hypotheses.
 | Race condition | Not a race — single thread, event loop, wrong order of operations |
 | Deadlock | Not a deadlock — infinite loop consuming CPU, no threads blocked |
 
+### Python Desktop / Event Loop
+
+| Looks Like | But Often Is |
+|---|---|
+| qasync bug | Wrong loop ownership — Qt and asyncio are not sharing one loop |
+| Async slot broken | Coroutine returned to Qt but never scheduled/awaited |
+| Random UI freeze | Blocking I/O on the UI event loop |
+| Threading bug | Direct widget/QObject mutation from a worker thread |
+| Exit bug | Pending websocket/scheduler/tasks never cancelled cleanly |
+
+### Bridge / Adapter / Unofficial Client
+
+| Looks Like | But Often Is |
+|---|---|
+| Baileys bug | Listener attached after ready/event already fired |
+| Websocket transport bug | Same listener registered again on reconnect |
+| JSON parse bug | Stdout protocol polluted by debug logs |
+| Parent/child mismatch | Parent and child are different builds or resolve different paths |
+| Scraper parser bug | Upstream provider drift, anti-bot, or markup change |
+
 ### Environment / Config
 
 | Looks Like | But Often Is |
@@ -152,6 +172,8 @@ Reference this list when generating competing hypotheses.
 | Works locally, fails in CI | Case-sensitive file path (Linux CI, macOS local) |
 | Works locally, fails in prod | Dependency version pinned differently between environments |
 | SSL error | Certificate hostname mismatch, not expiry |
+| Packaged app bug | Mutable state written to a read-only install path |
+| Packaged import bug | Hidden import or bundled helper missing from frozen build |
 
 ### Integration / Pipeline
 

@@ -176,3 +176,24 @@ This backlog is a curated list of benchmark cases worth adding first.
 - `OR-002` Concurrent order updates throw ObjectOptimisticLockingFailureException — @Version conflict
 - `OR-003` Saving parent+children creates duplicate order_items rows — mappedBy side not set on owner
 - `JT-001` JVM exits with SIGSEGV — crash in JNI native library, reading hs_err file
+
+## Python Desktop / UI
+
+- `PD-A01` qasync loop ownership split across two event loops (adversarial baseline case)
+- `PD-001` async PyQt slot returns coroutine object that nobody awaits
+- `PD-002` qasync desktop app freezes because blocking IMAP/SMTP work runs on the UI loop
+- `PD-003` worker thread mutates Qt widgets directly and trips thread-affinity rules
+
+## Bridge / Adapter / Unofficial Client
+
+- `BI-A01` stdout JSON protocol polluted by debug logs (adversarial baseline case)
+- `BI-001` first WhatsApp event lost because parent marks subprocess spawn as ready
+- `BI-002` reconnect path registers bridge listeners more than once
+- `BI-003` `ntscraper` returns empty results after upstream/provider drift (logs-only bias check)
+
+## Frozen / Packaged Runtime
+
+- `FR-A01` source works, packaged exe fails because bundled bridge/script path resolves wrong
+- `FR-001` packaged build misses dynamic import / hidden import
+- `FR-002` Qt platform plugin missing or misresolved on clean Windows machine
+- `FR-003` packaged app writes mutable session/auth state beside the exe

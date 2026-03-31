@@ -86,3 +86,19 @@ Do not let one stack dominate the suite. Keep at least:
 - Hibernate / JPA 3.x
 - HikariCP connection pooling
 - JNDI (Java Naming and Directory Interface)
+
+## Python Desktop / Bridge / Packaging Domains (Added post-1.4.1)
+
+| Domain | Benchmark Families | Target Cases |
+|---|---|---|
+| Python Desktop / UI | PyQt6 widgets, qasync loop ownership, async slots, UI freezes, thread affinity, desktop scheduler/websocket interaction | 12 |
+| Bridge / Adapter / Unofficial Client | Python-to-Node subprocesses, stdout protocol framing, Baileys lifecycle, websocket relay ordering, scraper/provider drift | 12 |
+| Frozen / Packaged Runtime | PyInstaller onefile/onedir, _MEIPASS, hidden imports, Qt plugins, writable paths, bundled helpers | 12 |
+
+### Additional Stack Families To Prioritize
+
+- PyQt6
+- qasync
+- PyInstaller
+- Baileys / WhatsApp bridge adapters
+- Python desktop local-agent runtimes

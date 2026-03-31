@@ -1,0 +1,4 @@
+{"type":"ready","session":"desk-01","seq":1}
+{"type":"presence","id":"4F2C8","seq":2}
+[bridge] ack 4F2C9
+{"type":"message","id":"4F2C9","seq":3}

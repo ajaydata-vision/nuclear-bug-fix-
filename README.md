@@ -48,8 +48,8 @@ nuclear-bug-fix/
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
 ├── setup                                 # Root setup entrypoint for git-cloned installs
 ├── setup.ps1                             # Root PowerShell setup entrypoint
-├── references/                           # 9 reference files for patterns, DDx, and external intelligence
-├── benchmarks/                           # 127 benchmark cases plus suite metadata
+├── references/                           # 12 reference files for patterns, DDx, and external intelligence
+├── benchmarks/                           # 145 benchmark cases plus suite metadata
 ├── scripts/
 │   ├── install.py                        # Local repo installer into Claude's skills directory
 │   ├── install.sh                        # One-line installer for macOS/Linux
@@ -62,7 +62,7 @@ nuclear-bug-fix/
     └── release.json                      # Single source of truth for released version metadata
 ```
 
-**Current repo snapshot:** 9 reference files, 127 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
+**Current repo snapshot:** 12 reference files, 145 benchmark cases, and 4,300+ lines across `SKILL.md` and `references/`.
 **Current release:** `1.4.1`  
 **Release date:** `2026-03-31`
 
@@ -343,8 +343,8 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 |---|---|
 | SKILL.md structure (6 phases) | ✅ Pass |
 | Domain router + DDx gate present | ✅ Pass |
-| Reference files present (9) | ✅ Pass |
-| Benchmark cases present (127) | ✅ Pass |
+| Reference files present (12) | ✅ Pass |
+| Benchmark cases present (145) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
 | Semantic release version (`1.4.1`) | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
@@ -390,4 +390,6 @@ Methodology developed through real production debugging sessions at
   <a href="https://www.xgenplus.com">xgenplus.com</a> ·
   <a href="https://github.com/ajaydata-vision">github.com/ajaydata-vision</a>
 </p>
+
+
 

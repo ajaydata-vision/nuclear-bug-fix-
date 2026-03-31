@@ -1,0 +1,7 @@
+_MEI31202\
+  app\
+    main.pyc
+  bridge\
+    wa_bridge.js
+  config\
+    default.json

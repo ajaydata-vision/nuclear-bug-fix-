@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Desktop / Bridge / Packaging Coverage
+- Added first-class skill routing and reference coverage for Python desktop UI (`PyQt6` + `qasync`), bridge/adapters (Baileys-style subprocess and scraper drift), and frozen Windows runtime issues (`PyInstaller`).
+- Tightened intake, meta-checks, forensic logging, DDx tables, and external-intelligence guidance for polyglot desktop apps where stdout may itself be a protocol channel.
+- Added 18 benchmark cases: `PD-A01`, `PD-001..005`, `BI-A01`, `BI-001..005`, `FR-A01`, `FR-001..005`.
+- Expanded benchmark metadata and backlog for the new domains so coverage stays aligned with the committed corpus.
+- Hardened the new benchmark family for single-shot credibility by reducing clue leakage, moving runtime clues into raw assets, and tightening one-shot eligibility for packaged evidence-limited cases.
+
+
 ## [1.4.1] - 2026-03-31
 
 ### Updater Hardening

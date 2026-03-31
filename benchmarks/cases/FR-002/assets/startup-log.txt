@@ -1,0 +1,5 @@
+[startup] frozen=True
+[startup] sys.executable=C:\Program Files\DeskAgent\DeskAgent.exe
+[startup] qt plugin path=""
+This application failed to start because no Qt platform plugin could be initialized.
+Available platform plugins are: windows.

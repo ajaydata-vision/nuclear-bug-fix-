@@ -1,28 +1,28 @@
 suite:
   name: nuclear-bug-fix-benchmarks
   version: 1
-  current_case_count: 127
+  current_case_count: 145
   purpose: Measure first-shot bug-fix accuracy, false-positive rate, and verification quality.
 
 tracks:
   - id: bohrbug-core
     description: Deterministic, reproducible, one-primary-cause bugs.
-    current_cases: 53
+    current_cases: 59
   - id: regression-version
     description: Dependency, browser, runtime, or documented behavior change regressions.
     current_cases: 7
   - id: deploy-env
     description: Wrong code running, stale assets, env drift, config mismatch, partial rollout.
-    current_cases: 32
+    current_cases: 37
   - id: intermittent-race
     description: Timing, concurrency, startup, flaky test, and load-amplified failures.
-    current_cases: 26
+    current_cases: 31
   - id: distributed-multi-factor
     description: Queues, webhooks, gateways, sagas, replica lag, and multi-service interactions.
     current_cases: 9
   - id: evidence-limited
-    description: Only logs, partial code, symptom text, or stack trace available. Not yet represented in the committed corpus.
-    current_cases: 0
+    description: Only logs, partial code, symptom text, or stack trace available.
+    current_cases: 2
 
 domains:
   - id: frontend
@@ -37,6 +37,15 @@ domains:
     current_cases: 11
   - id: version-external-intelligence
     current_cases: 7
+  - id: python-desktop
+    description: PyQt6/qasync event loop ownership, async slots, UI-thread affinity, desktop scheduler/websocket interaction, local SQLite in GUI process.
+    current_cases: 6
+  - id: bridge-adapters
+    description: Python-to-Node subprocess bridges, stdout-framed protocols, Baileys-style adapters, websocket relay lifecycle, unofficial scraper drift.
+    current_cases: 6
+  - id: frozen-runtime
+    description: PyInstaller onefile/onedir runtime shape, _MEIPASS resource lookup, hidden imports, Qt plugins, writable state paths, bundled subprocesses.
+    current_cases: 6
   - id: java-enterprise
     description: Servlet lifecycle, JSP scope/include, NIO ByteBuffer/Channel/Selector, Java threading, JVM/ClassLoader, JDBC, Spring Boot (Transactional, Hibernate, bean scope, Security).
     current_cases: 27
@@ -83,6 +92,11 @@ recommended_case_layout:
   - verify.md
   - assets/
 
+authoring_rules:
+  - Prefer symptom text, logs, partial code, and raw artifacts over answer-revealing prompts.
+  - Put packaged/runtime evidence in assets/ when the real signal is a startup log, stdout capture, or extracted file tree.
+  - Mark one_shot_eligible false when clean-machine or runtime proof is still required after diagnosis.
+
 starter_backlog_ids:
   - FE-001
   - FE-008
@@ -104,3 +118,6 @@ starter_backlog_ids:
   - DE-001
   - DE-002
   - DE-006
+
+
+

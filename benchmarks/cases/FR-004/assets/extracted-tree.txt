@@ -1,0 +1,5 @@
+_MEI12345\
+  app\
+    main.pyc
+  config\
+    default.json

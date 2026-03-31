@@ -245,6 +245,76 @@ What to look for:
 [library] CHANGELOG [version] breaking
 ```
 
+### For desktop / packaged / bridge stacks:
+```
+PyQt6 qasync [version] [symptom]
+PyInstaller [version] [symptom]
+@whiskeysockets/baileys [version] [symptom]
+ntscraper [version] [symptom]
+[library] packaged exe works from source fails
+[library] stdout protocol parse error
+```
+
+---
+
+## STACK-SPECIFIC QUERY PACKS
+
+### PyQt6 + qasync
+
+Search in this order:
+1. `PyQt6 qasync [version] [exact symptom]`
+2. `site:github.com "qasync" [exact error]`
+3. `site:doc.qt.io Qt thread affinity [object/widget type]`
+4. `PyInstaller PyQt6 [plugin/resource symptom]` if frozen build involved
+
+Look for:
+- Event-loop ownership guidance
+- `@asyncSlot()` usage
+- Qt thread-affinity rules
+- Known PyInstaller + Qt packaging notes
+
+### Baileys / Node bridge / stdout-framed protocols
+
+Search in this order:
+1. `@whiskeysockets/baileys [version] [symptom]`
+2. `site:github.com/WhiskeySockets/Baileys/issues [exact symptom]`
+3. `Node child_process stdout protocol [symptom]`
+4. `websocket reconnect duplicate listener [library]`
+
+Look for:
+- Ready/auth lifecycle changes
+- Reconnect/listener duplication reports
+- Breaking changes in auth state handling
+- Any guidance that stdout must remain protocol-only
+
+### ntscraper / unofficial scrapers
+
+Search in this order:
+1. `ntscraper [version] empty results`
+2. `site:github.com ntscraper issue empty results`
+3. `provider changed markup [feature] scraper`
+4. `ntscraper 403 429 rate limit`
+
+Look for:
+- Recent maintainer issues about breakage
+- Upstream markup or anti-bot changes
+- Version pins or hotfixes
+- Evidence that the provider contract changed without a local code change
+
+### PyInstaller on Windows
+
+Search in this order:
+1. `PyInstaller [version] [exact error]`
+2. `site:pyinstaller.org [feature] [symptom]`
+3. `site:github.com/pyinstaller/pyinstaller/issues [exact error]`
+4. `[library] PyInstaller hidden import`
+
+Look for:
+- Onefile vs onedir differences
+- Hidden import / collect-data guidance
+- Qt plugin packaging notes
+- `_MEIPASS`, writable path, and spawned-subprocess caveats
+
 ---
 
 ## HOW TO INTERPRET AND USE RESULTS
