@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.4.1",
-  "source_commit": "b0e2f9b0ac076cd85a2952fb3fd77eb83d4188f0",
-  "source_commit_short": "b0e2f9b",
+  "version": "1.5",
+  "source_commit": "5af07715a5de88d6ab2aa4290e708be89b2817cd",
+  "source_commit_short": "5af0771",
   "source_date": "2026-03-31",
-  "source_subject": "chore: harden updater pipeline for 1.4.1",
+  "source_subject": "chore: shorten updater smoke test paths",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
