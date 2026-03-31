@@ -13,10 +13,10 @@ $SelfSkillDir = Split-Path -Parent $ScriptDir
 $PersonalSkillDir = Join-Path $HOME ".claude\skills\$SkillName"
 $ProjectSkillDir = Join-Path (Get-Location) ".claude\skills\$SkillName"
 $DefaultArtifact = "dist/$SkillName.skill"
-$ReleaseUrl = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/dist/release.json"
-$CompareUrl = "https://github.com/$RepoOwner/$RepoName/compare"
-$InstallShUrl = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/scripts/install.sh"
-$InstallPs1Url = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/scripts/install.ps1"
+$ReleaseUrl = if ($env:NBF_RELEASE_URL) { $env:NBF_RELEASE_URL } else { "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/dist/release.json" }
+$CompareUrl = if ($env:NBF_COMPARE_URL) { $env:NBF_COMPARE_URL } else { "https://github.com/$RepoOwner/$RepoName/compare" }
+$InstallShUrl = if ($env:NBF_INSTALL_SH_URL) { $env:NBF_INSTALL_SH_URL } else { "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/scripts/install.sh" }
+$InstallPs1Url = if ($env:NBF_INSTALL_PS1_URL) { $env:NBF_INSTALL_PS1_URL } else { "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/scripts/install.ps1" }
 
 # Keep behavior in sync with scripts/update.sh.
 
@@ -38,7 +38,7 @@ function Read-SkillMetadataField {
         return $null
     }
 
-    $Pattern = "(?m)^\s+$([regex]::Escape($Field)):\s*['""]?([^'""]+)['""]?\s*$"
+    $Pattern = '(?m)^\s+{0}:\s*[''"]?([^''"\r\n]+)[''"]?\s*$' -f [regex]::Escape($Field)
     $Match = [regex]::Match((Get-Content -LiteralPath $Path -Raw), $Pattern)
     if ($Match.Success) {
         return $Match.Groups[1].Value
@@ -126,7 +126,7 @@ if (-not $ArtifactPath) {
     $ArtifactPath = $DefaultArtifact
 }
 
-$DistUrl = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/$ArtifactPath"
+$DistUrl = if ($env:NBF_DIST_URL) { $env:NBF_DIST_URL } else { "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/$ArtifactPath" }
 Write-Host "  Latest    : $LatestVersion" -NoNewline
 if ($LatestDate) {
     Write-Host " ($LatestDate)"
@@ -197,8 +197,8 @@ try {
         exit 1
     }
 
-    $VersionPattern = "(?m)^\s+version:\s*['""]?([^'""]+)['""]?\s*$"
-    $SourceCommitPattern = "(?m)^\s+source_commit:\s*['""]?([^'""]+)['""]?\s*$"
+    $VersionPattern = '(?m)^\s+version:\s*[''"]?([^''"\r\n]+)[''"]?\s*$'
+    $SourceCommitPattern = '(?m)^\s+source_commit:\s*[''"]?([^''"\r\n]+)[''"]?\s*$'
     $DownloadedVersionMatch = [regex]::Match($PackagedSkillMd, $VersionPattern)
     $DownloadedSourceCommitMatch = [regex]::Match($PackagedSkillMd, $SourceCommitPattern)
     $DownloadedVersion = if ($DownloadedVersionMatch.Success) { $DownloadedVersionMatch.Groups[1].Value } else { "" }

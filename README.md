@@ -43,8 +43,8 @@ It was born from real production debugging sessions where standard code review, 
 
 ```text
 nuclear-bug-fix/
-├── VERSION                               # Current release version (1.4)
-├── CHANGELOG.md                          # 1.4 release notes and release history
+├── VERSION                               # Current release version (1.4.1)
+├── CHANGELOG.md                          # 1.4.1 release notes and release history
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
 ├── setup                                 # Root setup entrypoint for git-cloned installs
 ├── setup.ps1                             # Root PowerShell setup entrypoint
@@ -63,7 +63,7 @@ nuclear-bug-fix/
 ```
 
 **Current repo snapshot:** 9 reference files, 127 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
-**Current release:** `1.4`  
+**Current release:** `1.4.1`  
 **Release date:** `2026-03-31`
 
 The reference files follow the same pattern language: **Symptom -> Why -> Prove -> Fix**
@@ -256,7 +256,7 @@ Windows PowerShell:
 & ".\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
 ```
 
-Maintainer note: when the update flow changes, keep `scripts/update.sh` and `scripts/update.ps1` behavior in sync.
+Maintainer note: when the update flow changes or the release version is bumped, keep `scripts/update.sh` and `scripts/update.ps1` behavior in sync and require the updater smoke tests to pass before shipping.
 
 ---
 
@@ -346,9 +346,12 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 | Reference files present (9) | ✅ Pass |
 | Benchmark cases present (127) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
-| Semantic release version (`1.4`) | ✅ Pass |
+| Semantic release version (`1.4.1`) | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
 | Release manifest ↔ packaged version alignment | ✅ Pass |
+| Ubuntu Bash updater smoke test (previous release -> current) | ✅ Pass |
+| Windows Git Bash updater smoke test (`1.3` -> current, `cp1252`) | ✅ Pass |
+| Windows PowerShell updater smoke test (previous release -> current) | ✅ Pass |
 
 ---
 

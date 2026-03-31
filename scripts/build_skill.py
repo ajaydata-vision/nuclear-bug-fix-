@@ -30,9 +30,20 @@ FORBIDDEN_PREFIXES = (
     "dist/",
     "evals/",
 )
-VERSION_PATTERN = re.compile(r"(^\s{1,4}version:\s*)\S+", re.MULTILINE)
-SOURCE_COMMIT_PATTERN = re.compile(r"(^\s{1,4}source_commit:\s*)\S+", re.MULTILINE)
+VERSION_PATTERN = re.compile(r"(^\s{1,4}version:\s*).+$", re.MULTILINE)
+SOURCE_COMMIT_PATTERN = re.compile(r"(^\s{1,4}source_commit:\s*).+$", re.MULTILINE)
 DEFAULT_RELEASE_ARTIFACT = f"dist/{SKILL_NAME}.skill"
+LEGACY_ASCII_REPLACEMENTS = (
+    ("☢️ ", ""),
+    ("☢", ""),
+    ("️", ""),
+    ("—", "-"),
+    ("–", "-"),
+    ("→", "->"),
+    ("≠", "!="),
+    ("□", "[ ]"),
+    ("★", "*"),
+)
 
 
 def git_repo_files() -> list[Path]:
@@ -75,7 +86,7 @@ def should_package(rel_path: str) -> bool:
 
 
 def patch_version(skill_text: str, version: str) -> str:
-    updated, count = VERSION_PATTERN.subn(lambda match: f"{match.group(1)}{version}", skill_text, count=1)
+    updated, count = VERSION_PATTERN.subn(lambda match: f'{match.group(1)}"{version}"', skill_text, count=1)
     if count != 1:
         raise ValueError("Could not locate metadata.version in SKILL.md")
     return updated
@@ -86,7 +97,7 @@ def patch_source_commit(skill_text: str, source_commit: str | None) -> str:
         return skill_text
 
     updated, count = SOURCE_COMMIT_PATTERN.subn(
-        lambda match: f"{match.group(1)}{source_commit}",
+        lambda match: f'{match.group(1)}"{source_commit}"',
         skill_text,
         count=1,
     )
@@ -98,19 +109,36 @@ def patch_source_commit(skill_text: str, source_commit: str | None) -> str:
         raise ValueError("Could not locate metadata.version in SKILL.md")
 
     insert_at = version_match.end()
-    return f"{skill_text[:insert_at]}\n  source_commit: {source_commit}{skill_text[insert_at:]}"
+    return f'{skill_text[:insert_at]}\n  source_commit: "{source_commit}"{skill_text[insert_at:]}'
 
 
 def patch_skill_metadata(skill_text: str, version: str, source_commit: str | None) -> str:
     return patch_source_commit(patch_version(skill_text, version), source_commit)
 
 
+def sanitize_packaged_skill_text(skill_text: str) -> str:
+    sanitized = skill_text
+    for old, new in LEGACY_ASCII_REPLACEMENTS:
+        sanitized = sanitized.replace(old, new)
+
+    remaining = sorted({char for char in sanitized if ord(char) > 127})
+    if remaining:
+        codepoints = ", ".join(f"U+{ord(char):04X}" for char in remaining)
+        raise ValueError(f"Packaged SKILL.md still contains non-ASCII characters: {codepoints}")
+
+    return sanitized
+
+
 def extract_skill_metadata(skill_text: str) -> dict[str, str]:
-    version_match = re.search(r"^\s{1,4}version:\s*(\S+)", skill_text, re.MULTILINE)
+    version_match = re.search(r'^\s{1,4}version:\s*["\']?([^"\r\n\']+)["\']?\s*$', skill_text, re.MULTILINE)
     if not version_match:
         raise ValueError("Packaged SKILL.md is missing metadata.version")
 
-    source_commit_match = re.search(r"^\s{1,4}source_commit:\s*(\S+)", skill_text, re.MULTILINE)
+    source_commit_match = re.search(
+        r'^\s{1,4}source_commit:\s*["\']?([^"\r\n\']+)["\']?\s*$',
+        skill_text,
+        re.MULTILINE,
+    )
     metadata = {"version": version_match.group(1)}
     if source_commit_match:
         metadata["source_commit"] = source_commit_match.group(1)
@@ -220,12 +248,11 @@ def build_archive(output_path: Path, version: str | None, source_commit: str | N
         for rel_path in tracked_files:
             source_path = REPO_ROOT / rel_path
             arcname = f"{ARCHIVE_PREFIX}{rel_path}"
-            if rel_path == "SKILL.md" and version is not None:
-                data = patch_skill_metadata(
-                    source_path.read_text(encoding="utf-8"),
-                    version,
-                    source_commit,
-                ).encode("utf-8")
+            if rel_path == "SKILL.md":
+                skill_text = source_path.read_text(encoding="utf-8")
+                if version is not None:
+                    skill_text = patch_skill_metadata(skill_text, version, source_commit)
+                data = sanitize_packaged_skill_text(skill_text).encode("utf-8")
                 info = zipfile.ZipInfo(arcname)
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = 0o100644 << 16

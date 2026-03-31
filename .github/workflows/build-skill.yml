@@ -6,8 +6,76 @@ on:
 
 # Prevent loop: skip bot-authored pushes and already-built release commits.
 jobs:
+  updater-smoke:
+    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'ci: build dist @')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: bash-prev-release
+            updater: bash
+            installed_release_version: ""
+            python_io_encoding: ""
+          - os: windows-latest
+            label: bash-legacy-1.3
+            updater: bash
+            installed_release_version: "1.3"
+            python_io_encoding: "cp1252"
+          - os: windows-latest
+            label: powershell-prev-release
+            updater: powershell
+            installed_release_version: ""
+            python_io_encoding: ""
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Read release version
+        id: release
+        shell: bash
+        run: echo "version=$(tr -d '\n' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Build candidate updater artifact
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          python scripts/build_skill.py build \
+            --output dist/nuclear-bug-fix.skill \
+            --version "${RELEASE_VERSION}" \
+            --source-commit "${SOURCE_COMMIT}"
+          python scripts/build_skill.py write-release-manifest \
+            --output dist/release.json \
+            --version "${RELEASE_VERSION}" \
+            --source-commit "${SOURCE_COMMIT}" \
+            --artifact dist/nuclear-bug-fix.skill
+          python scripts/build_skill.py validate \
+            --archive dist/nuclear-bug-fix.skill \
+            --manifest dist/release.json \
+            --max-size-bytes 5000000
+
+      - name: Smoke test updater (${{ matrix.label }})
+        shell: bash
+        run: |
+          args=(--updater "${{ matrix.updater }}")
+          if [[ -n "${{ matrix.installed_release_version }}" ]]; then
+            args+=(--installed-release-version "${{ matrix.installed_release_version }}")
+          fi
+          if [[ -n "${{ matrix.python_io_encoding }}" ]]; then
+            args+=(--python-io-encoding "${{ matrix.python_io_encoding }}")
+          fi
+          python scripts/test_updater.py "${args[@]}"
+
   build:
     if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'ci: build dist @')
+    needs: updater-smoke
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -13,10 +13,10 @@ SELF_SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PERSONAL_SKILL_DIR="${HOME}/.claude/skills/${SKILL_NAME}"
 PROJECT_SKILL_DIR=".claude/skills/${SKILL_NAME}"
 DEFAULT_ARTIFACT="dist/${SKILL_NAME}.skill"
-RELEASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/dist/release.json"
-COMPARE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/compare"
-INSTALL_SH_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.sh"
-INSTALL_PS1_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.ps1"
+RELEASE_URL="${NBF_RELEASE_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/dist/release.json}"
+COMPARE_URL="${NBF_COMPARE_URL:-https://github.com/${REPO_OWNER}/${REPO_NAME}/compare}"
+INSTALL_SH_URL="${NBF_INSTALL_SH_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.sh}"
+INSTALL_PS1_URL="${NBF_INSTALL_PS1_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/scripts/install.ps1}"
 
 to_python_path() {
   local path="$1"
@@ -25,6 +25,18 @@ to_python_path() {
   else
     printf '%s\n' "$path"
   fi
+}
+
+find_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "python3"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' "python"
+    return 0
+  fi
+  return 1
 }
 
 print_manual_reinstall() {
@@ -85,31 +97,31 @@ release_response=$(curl -sf \
   exit 1
 }
 
-if ! command -v python3 &>/dev/null; then
-  echo "❌ python3 is required to parse dist/release.json but was not found in PATH."
-  echo "   Install python3 or reinstall with:"
+if ! PYTHON_BIN="$(find_python)"; then
+  echo "❌ python3 or python is required to parse dist/release.json but was not found in PATH."
+  echo "   Install Python or reinstall with:"
   print_manual_reinstall
   exit 1
 fi
 
-latest_version=$(echo "$release_response" | python3 -c \
+latest_version=$(echo "$release_response" | "${PYTHON_BIN}" -c \
   "import sys,json; print(json.load(sys.stdin)['version'])" 2>/dev/null) || {
   echo "❌ Unexpected release manifest. Try again later."; exit 1
 }
-latest_source_commit=$(echo "$release_response" | python3 -c \
+latest_source_commit=$(echo "$release_response" | "${PYTHON_BIN}" -c \
   "import sys,json; print(json.load(sys.stdin)['source_commit'])" 2>/dev/null) || {
   echo "❌ Release manifest missing source_commit. Try again later."; exit 1
 }
-latest_date=$(echo "$release_response" | python3 -c \
+latest_date=$(echo "$release_response" | "${PYTHON_BIN}" -c \
   "import sys,json; print(json.load(sys.stdin).get('source_date', ''))" 2>/dev/null \
   || echo "")
-latest_msg=$(echo "$release_response" | python3 -c \
+latest_msg=$(echo "$release_response" | "${PYTHON_BIN}" -c \
   "import sys,json; print(json.load(sys.stdin).get('source_subject', '')[:70])" 2>/dev/null \
   || echo "")
-artifact_path=$(echo "$release_response" | python3 -c \
+artifact_path=$(echo "$release_response" | "${PYTHON_BIN}" -c \
   "import sys,json; print(json.load(sys.stdin).get('artifact', '${DEFAULT_ARTIFACT}'))" 2>/dev/null \
   || echo "${DEFAULT_ARTIFACT}")
-DIST_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${artifact_path}"
+DIST_URL="${NBF_DIST_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${artifact_path}}"
 
 echo "  Latest    : ${latest_version}  ${latest_date:+(${latest_date})}"
 
@@ -143,9 +155,21 @@ curl -sf -L "${DIST_URL}" -o "${TMP}" || {
   rm -f "${TMP}"; exit 1
 }
 
-# Sanity check — .skill is a zip; verify it contains a valid SKILL.md and matches release.json
-validation_output=$(python3 -c \
-  "import sys, zipfile; print(zipfile.ZipFile(sys.argv[1]).read('${SKILL_NAME}/SKILL.md').decode('utf-8'), end='')" \
+# Sanity check — .skill is a zip; verify it contains the expected metadata.
+# Do not print the full SKILL.md here: on Windows Git Bash a native Python can
+# inherit a cp1252 stdout encoding and crash on Unicode characters in the file.
+validation_output=$("${PYTHON_BIN}" -c \
+  "import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    text = archive.read('${SKILL_NAME}/SKILL.md').decode('utf-8')
+lines = text.splitlines()
+for target in ('name:', '  version:', '  source_commit:'):
+    for line in lines:
+        if line.startswith(target):
+            print(line)
+            break
+    else:
+        print('')" \
   "$(to_python_path "${TMP}")" 2>&1) || {
   echo "❌ Downloaded file invalid or unreadable. Aborting."
   [[ -n "${validation_output}" ]] && echo "   ${validation_output}"
@@ -153,7 +177,7 @@ validation_output=$(python3 -c \
 }
 packaged_skill_md="${validation_output}"
 
-echo "$packaged_skill_md" | grep -q "name: ${SKILL_NAME}" || {
+echo "$packaged_skill_md" | grep -q "^name: ${SKILL_NAME}$" || {
   echo "❌ Downloaded file invalid (not a valid skill archive or missing skill name). Aborting."
   rm -f "${TMP}"; exit 1
 }
@@ -200,7 +224,7 @@ if [[ ! -f "${SCRIPT_DIR}/install.py" ]]; then
   rm -f "${TMP}"; exit 1
 fi
 
-python3 "$(to_python_path "${SCRIPT_DIR}/install.py")" \
+"${PYTHON_BIN}" "$(to_python_path "${SCRIPT_DIR}/install.py")" \
   --from-archive "$(to_python_path "${TMP}")" \
   --install-dir "$(to_python_path "${TARGET_DIR}")" >/dev/null || {
   echo "❌ Failed to install the downloaded update."

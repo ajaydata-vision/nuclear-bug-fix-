@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.1] - 2026-03-31
+
+### Updater Hardening
+- Fixed the shipped Bash updater path for legacy Windows installs by avoiding Unicode-sensitive archive validation output and by packaging an ASCII-safe `SKILL.md` inside the `.skill` archive.
+- Added Python fallback detection in `scripts/update.sh` so Git Bash installs work with either `python3` or `python` on PATH.
+- Added updater smoke tests in `scripts/test_updater.py` covering prior-release installs, explicit legacy `1.3` installs, Git Bash on Windows with `cp1252`, and PowerShell installs.
+- Gated `.github/workflows/build-skill.yml` on cross-platform updater smoke tests before `dist/` is rebuilt and pushed.
+- Release process requirement: when the version changes, updater coverage is part of ship readiness and must be reported alongside the version bump.
+
 ## [1.4] - 2026-03-31
 
 ### Phase 2 Additions (WebFlux, ORM, JVM)
