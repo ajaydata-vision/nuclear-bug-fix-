@@ -197,6 +197,7 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | **Frontend** | UI not rendering, CSS broken, component state wrong, hydration error, bundle error, browser-only bug, routing broken, form not submitting, WebSocket UI issue | `references/frontend-patterns.md` |
 | **Mobile** | App crash, React Native bridge error, iOS/Android specific behavior, device permission, push notification, offline sync, memory warning on device | `references/frontend-patterns.md` + mobile section |
 | **Backend** | API response wrong, auth failing, DB issue, background job silent, queue not consumed, file upload broken, rate limit wrong, session bug, ORM query wrong | `references/backend-patterns.md` |
+| **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect | `references/java-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
@@ -554,7 +555,13 @@ Make the bug prove itself. Never guess.
 # Type + value (adapt to language)
 Python:       print(f"[DEBUG] {var=}, type={type(var).__name__}, repr={repr(var)}")
 JavaScript:   console.log('[DEBUG]', {var, type: typeof var, value: JSON.stringify(var)})
-Java:         System.out.printf("[DEBUG] %s type=%s%n", var, var.getClass().getName());
+Java (SLF4J+MDC — servlet-container safe, thread-aware):
+              MDC.put("reqId", UUID.randomUUID().toString());
+              log.debug("[DEBUG] var={} type={} threadId={}", var,
+                        var != null ? var.getClass().getName() : "null",
+                        Thread.currentThread().getId());
+              // NIO: log.debug("[DEBUG] buf pos={} lim={} remaining={}", buf.position(), buf.limit(), buf.remaining());
+              // Deadlock: long[] d = ManagementFactory.getThreadMXBean().findDeadlockedThreads(); log.debug("deadlocked={}", Arrays.toString(d));
 Go:           log.Printf("[DEBUG] %T %+v", var, var)
 ```
 

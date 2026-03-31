@@ -68,3 +68,21 @@ Do not let one stack dominate the suite. Keep at least:
 - `40%` stack-specific patterns
 - `20%` version, deploy, or distributed environment cases
 
+
+## Java Enterprise Domain (Added v1.4)
+
+| Domain | Benchmark Families | Target Cases |
+|---|---|---|
+| Java Enterprise | servlet lifecycle/threading, JSP scope/include/EL, NIO ByteBuffer/Channel/Selector, Java threading (ThreadLocal/Interrupt/Executor/wait-notify), JVM ClassLoader/OOM, JDBC/HikariCP/JNDI, Spring Boot (@Transactional/Hibernate/bean-scope/Security) | 20 |
+
+### Java Stack Families Added to Priority List
+
+- Java Servlets (Tomcat 9/10, JBoss/WildFly)
+- JSP / Jakarta Server Pages
+- java.nio.channels (NIO — non-blocking I/O)
+- Java Threading (synchronized, volatile, Executor, ThreadLocal)
+- Spring Boot 3.x
+- Spring Security 6.x
+- Hibernate / JPA 3.x
+- HikariCP connection pooling
+- JNDI (Java Naming and Directory Interface)

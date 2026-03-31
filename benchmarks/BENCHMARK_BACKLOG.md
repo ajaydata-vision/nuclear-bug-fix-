@@ -143,3 +143,26 @@ This backlog is a curated list of benchmark cases worth adding first.
 - `DE-009` secret rotated in one service but not dependent service
 - `DE-010` staging reproduces issue only with production data volume, not synthetic data
 
+
+## Java Enterprise
+
+- `JV-A01` servlet instance variable causes cross-user cart contamination under concurrency (adversarial baseline case)
+- `JV-A02` Spring @Transactional self-invocation silently skips rollback on inner method (adversarial baseline case)
+- `JV-A03` ByteBuffer.flip() not called before channel.write() sends 0 bytes (adversarial baseline case)
+- `JV-A04` Hibernate LazyInitializationException when accessing collection after session closes (adversarial baseline case)
+- `JV-A05` HikariCP pool exhaustion from JDBC connection leaked in catch block (adversarial baseline case)
+- `JV-001` @WebFilter annotation ordering bypasses auth filter in Tomcat WAR deployment
+- `JV-002` JSP session scope stores per-request search results causing cross-request leak
+- `JV-003` JSP compile-time include bakes footer at translation — changes need parent JSP touch
+- `JV-004` EL expression returns null because servlet never called req.setAttribute
+- `JV-005` NIO proxy drops bytes — buffer.clear() called after partial channel write
+- `JV-006` NIO server truncates large responses — single channel.write() not looped
+- `JV-007` NIO selector loop throws CancelledKeyException — selectedKeys not removed via iterator
+- `JV-008` MDC userId leaks between requests — ThreadLocal not cleared in filter finally block
+- `JV-009` Spring Boot hangs on shutdown — InterruptedException swallowed in worker loop
+- `JV-010` Email tasks silently dropped under burst — RejectedExecutionException uncaught
+- `JV-011` Producer-consumer NPE — wait() guarded with if instead of while (spurious wakeup)
+- `JV-012` ClassCastException in Tomcat WAR — log4j-core in both WEB-INF/lib and server lib
+- `JV-013` JNDI DataSource not found — missing java:comp/env/ prefix in lookup string
+- `JV-014` Spring Security JWT filter runs but SecurityContext is empty — filter outside Security chain
+- `JV-015` Prototype ReportGenerator accumulates state — injected once into singleton

@@ -2,7 +2,14 @@
 
 ## [1.4] - Unreleased
 
-- No unreleased changes yet.
+### Java Enterprise Support
+- Added `references/java-patterns.md` — 7 categories, 25 patterns covering Servlet lifecycle/threading, JSP scope/include/EL, NIO ByteBuffer/Channel/Selector, Java threading (ThreadLocal, InterruptedException, Executor rejection, wait/notify), JVM ClassLoader/OOM, JDBC/HikariCP/JNDI, Spring Boot (@Transactional self-invocation, LazyInitializationException, bean scope, Security filter chain).
+- Added Java Enterprise domain to Phase 2A domain router in SKILL.md with natural-language developer signals.
+- Added 20 Java benchmark cases (JV-A01–JV-A05 adversarial, JV-001–JV-015 confirmatory) covering all 7 pattern categories.
+- Upgraded Java logging example in Phase 3.8 from `System.out.printf` to SLF4J+MDC with thread-aware NIO/thread-pool diagnostics.
+- Fixed JFR invocation in `references/intermittent-race-bugs.md` — removed deprecated `-XX:+UnlockCommercialFeatures` flag (invalid on JDK 11+ OpenJDK); added correct JDK 17+ `jcmd` form and JDK 8 Oracle note.
+- Updated `benchmarks/index.yaml`: total cases 100→120, bohrbug-core 36→49, intermittent-race 19→24, deploy-env 29→31, added java-enterprise domain.
+- Updated `benchmarks/COVERAGE_MATRIX.md` and `benchmarks/BENCHMARK_BACKLOG.md` with Java Enterprise domain and case listings.
 
 ## [1.3] - 2026-03-30
 

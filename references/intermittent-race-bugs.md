@@ -463,7 +463,14 @@ valgrind --tool=helgrind ./myapp
 
 ### Java — Thread Sanitizer / FindBugs / JCStress
 ```bash
-# Java Flight Recorder (built-in, low overhead)
+# Java Flight Recorder — JDK 11+ OpenJDK and OracleJDK (UnlockCommercialFeatures removed)
+java -XX:StartFlightRecording=duration=60s,filename=race.jfr MyApp
+
+# JDK 17+ preferred: attach to running process (no restart required)
+jcmd <pid> JFR.start duration=60s filename=/tmp/race.jfr
+jcmd <pid> JFR.stop
+
+# JDK 8 OracleJDK only (commercial flag still required on Oracle JDK 8)
 java -XX:+UnlockCommercialFeatures -XX:+FlightRecorder \
      -XX:StartFlightRecording=duration=60s,filename=race.jfr MyApp
 
@@ -473,7 +480,9 @@ java -XX:+UnlockCommercialFeatures -XX:+FlightRecorder \
 # FindBugs / SpotBugs (static analysis for race patterns)
 spotbugs -html report.html myapp.jar
 
-# Also: use volatile/synchronized correctly and let the compiler warn you
+# Thread dump for deadlock and hung threads (non-destructive, any JDK)
+jcmd <pid> Thread.print    # JDK 17+ preferred
+jstack -l <pid>            # classic, includes lock ownership info
 ```
 
 ### Python — threading + logging + loop
