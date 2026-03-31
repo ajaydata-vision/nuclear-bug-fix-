@@ -27,6 +27,15 @@ ALLOWED_TOP_LEVELS = ALLOWED_TOP_LEVEL_FILES + ALLOWED_TOP_LEVEL_DIRS
 VERSION_PATTERN = re.compile(r"^\s{1,4}version:\s*(\S+)", re.MULTILINE)
 
 
+STAGING_PREFIX = ".nbf-stg-"
+BACKUP_PREFIX = ".nbf-bak-"
+TEMP_NAME_BYTES = 12
+
+
+def temp_name(prefix: str) -> str:
+    return f"{prefix}{uuid.uuid4().hex[:TEMP_NAME_BYTES]}"
+
+
 def default_repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -96,7 +105,7 @@ def ensure_target_parent(target_dir: Path) -> None:
 
 def create_staging_dir(target_dir: Path) -> Path:
     ensure_target_parent(target_dir)
-    staging_dir = target_dir.parent / f"{SKILL_NAME}-staging-{uuid.uuid4().hex}"
+    staging_dir = target_dir.parent / temp_name(STAGING_PREFIX)
     staging_dir.mkdir(parents=True, exist_ok=False)
     return staging_dir
 
@@ -121,7 +130,7 @@ def replace_install_dir(staging_dir: Path, target_dir: Path) -> None:
 
     try:
         if target_dir.exists():
-            backup_dir = target_dir.parent / f"{SKILL_NAME}-backup-{uuid.uuid4().hex}"
+            backup_dir = target_dir.parent / temp_name(BACKUP_PREFIX)
             shutil.move(str(target_dir), str(backup_dir))
             backed_up_existing = True
 

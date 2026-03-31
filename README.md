@@ -43,8 +43,8 @@ It was born from real production debugging sessions where standard code review, 
 
 ```text
 nuclear-bug-fix/
-├── VERSION                               # Current release version (1.4.1)
-├── CHANGELOG.md                          # 1.4.1 release notes and release history
+├── VERSION                               # Current release version (1.5)
+├── CHANGELOG.md                          # 1.5 release notes and release history
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
 ├── setup                                 # Root setup entrypoint for git-cloned installs
 ├── setup.ps1                             # Root PowerShell setup entrypoint
@@ -63,7 +63,7 @@ nuclear-bug-fix/
 ```
 
 **Current repo snapshot:** 12 reference files, 145 benchmark cases, and 4,300+ lines across `SKILL.md` and `references/`.
-**Current release:** `1.4.1`  
+**Current release:** `1.5`  
 **Release date:** `2026-03-31`
 
 The reference files follow the same pattern language: **Symptom -> Why -> Prove -> Fix**
@@ -346,7 +346,7 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 | Reference files present (12) | ✅ Pass |
 | Benchmark cases present (145) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
-| Semantic release version (`1.4.1`) | ✅ Pass |
+| Semantic release version (`1.5`) | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
 | Release manifest ↔ packaged version alignment | ✅ Pass |
 | Ubuntu Bash updater smoke test (previous release -> current) | ✅ Pass |

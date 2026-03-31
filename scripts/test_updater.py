@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import uuid
 from pathlib import Path
 
 
@@ -62,6 +63,21 @@ def load_release_manifest() -> dict[str, str]:
 
 def head_commit() -> str:
     return run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"]).stdout.strip()
+
+
+def create_accessible_temp_root() -> Path:
+    parent = Path(tempfile.gettempdir()) / f"{SKILL_NAME}-updater-work"
+    parent.mkdir(parents=True, exist_ok=True)
+
+    for _ in range(10):
+        candidate = parent / f"{SKILL_NAME}-updater-{uuid.uuid4().hex}"
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+
+    raise RuntimeError("Could not allocate updater temp root")
 
 
 def latest_release_commit(*, exclude_commits: set[str] | None = None) -> str:
@@ -294,8 +310,8 @@ def main() -> int:
     else:
         installed_commit = latest_release_commit(exclude_commits={head_commit()})
 
-    with tempfile.TemporaryDirectory(prefix=f"{SKILL_NAME}-updater-") as tmp:
-        temp_root = Path(tmp)
+    temp_root = create_accessible_temp_root()
+    try:
         snapshot_dir = temp_root / "snapshot"
         fake_home = temp_root / "Ajay Data Home"
         installed_dir = fake_home / ".claude" / "skills" / SKILL_NAME
@@ -321,6 +337,8 @@ def main() -> int:
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
 
     if updated_version != expected_version:
         raise RuntimeError(
