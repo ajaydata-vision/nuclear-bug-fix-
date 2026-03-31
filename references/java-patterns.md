@@ -449,3 +449,101 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 // Set authentication: SecurityContextHolder.getContext().setAuthentication(auth)
 ```
 Never use `@WebFilter` or `FilterRegistrationBean` for filters that need to set or read `SecurityContext`.
+
+---
+
+## CATEGORY 8 — ORM / JPA PATTERNS (Hibernate)
+
+### Pattern: N+1 query — fast in dev, times out in production
+**Symptom:** List endpoint fast in development (10–50 rows). Times out in production with thousands of rows. DB CPU spikes. Response time grows linearly with data volume. No error thrown.
+**Why:** `@OneToMany` with `FetchType.LAZY` (default). Loading N parent entities triggers N individual `SELECT` queries for children — 1 + N total. With SQL logging disabled (default in prod), the problem is invisible in code review.
+**Prove:** Enable `spring.jpa.show-sql=true`. Make one API call. Count SQL statements — should be O(1) not O(N). Look for `SELECT * FROM order_items WHERE order_id = ?` repeated N times.
+**Fix:**
+```java
+// Option 1: JOIN FETCH in JPQL (single query, all data)
+@Query("SELECT o FROM Order o JOIN FETCH o.items WHERE o.status = :status")
+List<Order> findByStatusWithItems(@Param("status") Status status);
+
+// Option 2: @EntityGraph
+@EntityGraph(attributePaths = {"items"})
+List<Order> findByStatus(Status status);
+
+// Option 3: @BatchSize (issues batch IN queries, not N individual)
+@OneToMany @BatchSize(size = 30)
+private List<OrderItem> items;
+```
+
+### Pattern: Optimistic locking conflict — ObjectOptimisticLockingFailureException under load
+**Symptom:** Concurrent updates to the same entity fail with `ObjectOptimisticLockingFailureException`. Works fine single-threaded. Failure rate increases with concurrency.
+**Why:** `@Version` field enables optimistic locking. Two transactions read entity at version N. Both update and try to commit at version N+1. First commit succeeds (version → N+1). Second commit finds version already N+1, expected N — rejected.
+**Prove:** Log the `@Version` field value on read and on write attempt for both concurrent requests. Both will show version=N on read, first write succeeds, second fails.
+**Fix:**
+```java
+// Catch and retry at service layer
+@Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3)
+@Transactional
+public Order updateOrder(Long id, OrderDto dto) { ... }
+
+// Or: pessimistic lock for highly-contended entities
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("SELECT o FROM Order o WHERE o.id = :id")
+Order findByIdForUpdate(@Param("id") Long id);
+```
+
+### Pattern: Bidirectional @OneToMany — mappedBy side not set causes duplicate inserts
+**Symptom:** Saving parent entity with children causes duplicate rows in child table, or a unique/FK constraint violation. SQL logs show unexpected extra INSERT or UPDATE.
+**Why:** In bidirectional `@OneToMany` / `@ManyToOne`, the child's `@ManyToOne` side owns the relationship FK. The parent's `@OneToMany(mappedBy=...)` is the inverse side — it is informational only. If `child.setParent(parent)` is not called before saving, Hibernate cannot set the FK correctly and issues a redundant UPDATE or duplicate INSERT.
+**Prove:** Enable SQL logging. Count INSERT and UPDATE statements for a single parent+children save. Extra statements beyond one INSERT per entity = mappedBy side not maintained.
+**Fix:**
+```java
+// Always set BOTH sides of a bidirectional relationship
+public void addItem(OrderItem item) {
+    this.items.add(item);      // inverse side (informational)
+    item.setOrder(this);       // owner side — controls the FK column
+}
+// Use this method everywhere, never manipulate items list directly
+```
+
+---
+
+## CATEGORY 9 — SPRING WEBFLUX / REACTIVE
+
+### Pattern: Blocking call inside Reactor pipeline — scheduler thread starvation
+**Symptom:** WebFlux API responds fast under low load. Hangs completely under moderate concurrent load. No error thrown. Requests queue indefinitely.
+**Why:** Reactor's `parallel` and `nio` schedulers have a small fixed thread count (2×CPU). Any blocking call inside `.map()` or `.flatMap()` holds a scheduler thread. Under load, all threads block and no reactive work progresses.
+**Prove:** Install BlockHound in test environment: `BlockHound.install()` — throws `BlockingOperationError` with exact stack trace on any blocking call in non-blocking context. In production: log `Thread.currentThread().getName()` inside the pipeline — `reactor-http-nio-*` threads must not block.
+**Fix:**
+```java
+// Wrong — blocks a Reactor nio thread
+.flatMap(id -> Mono.just(jdbcRepository.findById(id)))
+
+// Correct — offloads to boundedElastic (designed for blocking work)
+.flatMap(id -> Mono.fromCallable(() -> jdbcRepository.findById(id))
+                   .subscribeOn(Schedulers.boundedElastic()))
+```
+
+### Pattern: switchIfEmpty missing — Mono.empty() serializes as HTTP 200 not 404
+**Symptom:** GET endpoint returns 200 with empty/null body when resource not found. Client receives null and fails silently. No exception.
+**Why:** Reactive `repository.findById()` returns `Mono.empty()` for not-found. Without `switchIfEmpty()`, the pipeline completes successfully with no emission. Spring WebFlux returns 200 with empty body for a completed empty Mono.
+**Prove:** Call endpoint with non-existent ID. Log `mono.doOnSuccess(v -> log.debug("value: {}", v))` — logs null for empty Mono.
+**Fix:**
+```java
+return repo.findById(id)
+    .switchIfEmpty(Mono.error(new ResponseStatusException(NOT_FOUND, "id=" + id)))
+    .map(entity -> ResponseEntity.ok(toDto(entity)));
+```
+
+### Pattern: Spring Security context null in WebFlux — ThreadLocal not propagated
+**Symptom:** `SecurityContextHolder.getContext().getAuthentication()` returns null inside reactive pipeline despite authenticated request.
+**Why:** Spring Security for WebFlux stores the security context in Reactor's `Context` API, not `ThreadLocal`. `SecurityContextHolder` (MVC/ThreadLocal mechanism) has no value on Reactor's scheduler threads.
+**Prove:** Use `ReactiveSecurityContextHolder.getContext()` in the same pipeline location. If it returns the authentication but `SecurityContextHolder` does not → ThreadLocal/Reactor mismatch confirmed.
+**Fix:**
+```java
+// Wrong (MVC ThreadLocal pattern — fails in WebFlux)
+String user = SecurityContextHolder.getContext().getAuthentication().getName();
+
+// Correct (Reactor Context pattern)
+return ReactiveSecurityContextHolder.getContext()
+    .map(ctx -> ctx.getAuthentication().getName())
+    .flatMap(username -> service.doWork(username));
+```

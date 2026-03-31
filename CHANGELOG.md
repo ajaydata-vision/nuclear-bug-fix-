@@ -2,6 +2,13 @@
 
 ## [1.4] - Unreleased
 
+### Phase 2 Additions (WebFlux, ORM, JVM)
+- Extended `references/java-patterns.md` with Category 8 (ORM/JPA: N+1, optimistic locking, bidirectional mapping) and Category 9 (WebFlux: blocking-in-reactive, switchIfEmpty, ReactiveSecurityContextHolder).
+- Added hs_err JVM crash reading pattern to Category 5 (JVM).
+- Extended SKILL.md Phase 3.6 with app-server (JBoss/WebLogic/GlassFish) and WebFlux/BlockHound search triggers.
+- Added 7 new benchmark cases: WF-001..003 (WebFlux), OR-001..003 (ORM/JPA), JT-001 (JVM crash).
+- Updated benchmarks/index.yaml: 120→127 cases, java-enterprise domain 20→27.
+
 ### Java Enterprise Support
 - Added `references/java-patterns.md` — 7 categories, 25 patterns covering Servlet lifecycle/threading, JSP scope/include/EL, NIO ByteBuffer/Channel/Selector, Java threading (ThreadLocal, InterruptedException, Executor rejection, wait/notify), JVM ClassLoader/OOM, JDBC/HikariCP/JNDI, Spring Boot (@Transactional self-invocation, LazyInitializationException, bean scope, Security filter chain).
 - Added Java Enterprise domain to Phase 2A domain router in SKILL.md with natural-language developer signals.

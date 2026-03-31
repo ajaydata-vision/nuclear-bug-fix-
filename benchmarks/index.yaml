@@ -1,22 +1,22 @@
 suite:
   name: nuclear-bug-fix-benchmarks
   version: 1
-  current_case_count: 120
+  current_case_count: 127
   purpose: Measure first-shot bug-fix accuracy, false-positive rate, and verification quality.
 
 tracks:
   - id: bohrbug-core
     description: Deterministic, reproducible, one-primary-cause bugs.
-    current_cases: 49
+    current_cases: 53
   - id: regression-version
     description: Dependency, browser, runtime, or documented behavior change regressions.
     current_cases: 7
   - id: deploy-env
     description: Wrong code running, stale assets, env drift, config mismatch, partial rollout.
-    current_cases: 31
+    current_cases: 32
   - id: intermittent-race
     description: Timing, concurrency, startup, flaky test, and load-amplified failures.
-    current_cases: 24
+    current_cases: 26
   - id: distributed-multi-factor
     description: Queues, webhooks, gateways, sagas, replica lag, and multi-service interactions.
     current_cases: 9
@@ -30,7 +30,7 @@ domains:
   - id: backend
     current_cases: 31
   - id: integration
-    current_cases: 20
+    current_cases: 27
   - id: mobile
     current_cases: 2
   - id: general
@@ -39,7 +39,7 @@ domains:
     current_cases: 7
   - id: java-enterprise
     description: Servlet lifecycle, JSP scope/include, NIO ByteBuffer/Channel/Selector, Java threading, JVM/ClassLoader, JDBC, Spring Boot (Transactional, Hibernate, bean scope, Security).
-    current_cases: 20
+    current_cases: 27
 
 scoring:
   first_shot_resolution: 40

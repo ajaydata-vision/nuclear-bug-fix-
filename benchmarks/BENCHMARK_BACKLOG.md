@@ -166,3 +166,13 @@ This backlog is a curated list of benchmark cases worth adding first.
 - `JV-013` JNDI DataSource not found — missing java:comp/env/ prefix in lookup string
 - `JV-014` Spring Security JWT filter runs but SecurityContext is empty — filter outside Security chain
 - `JV-015` Prototype ReportGenerator accumulates state — injected once into singleton
+
+## Java Enterprise — Phase 2 (WebFlux, ORM, JVM)
+
+- `WF-001` WebFlux API hangs under load — JDBC call on Reactor nio thread causes starvation
+- `WF-002` WebFlux GET returns 200 empty body for missing resource — switchIfEmpty absent
+- `WF-003` Spring Security authentication null in WebFlux — ThreadLocal vs Reactor Context
+- `OR-001` Order list times out in production — Hibernate N+1 from lazy @OneToMany
+- `OR-002` Concurrent order updates throw ObjectOptimisticLockingFailureException — @Version conflict
+- `OR-003` Saving parent+children creates duplicate order_items rows — mappedBy side not set on owner
+- `JT-001` JVM exits with SIGSEGV — crash in JNI native library, reading hs_err file
