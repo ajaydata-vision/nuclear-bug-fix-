@@ -158,6 +158,36 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Prove:** Log every state transition: `loading=true`, `loading=false`. Is the false ever logged?
 **Fix:** Always set `isLoading = false` in `finally` block, not just in `try` and `catch`.
 
+### Pattern: Optimistic UI desyncs from server under rapid mutations or slow network
+**Symptom:** Counter or UI state flashes wrong values briefly before correcting. Only on slow connections or when the same action fires rapidly. The value shown is never consistent with either the old or new server state.
+**Why:** Each mutation applies an independent optimistic delta to local state. Multiple in-flight mutations read the same stale base value, each incrementing from it. When responses arrive out of order, deltas stack incorrectly against a base that has already changed.
+**Prove:** Throttle to 3G in DevTools. Trigger the mutation 3–4 times rapidly. Watch the counter — it will flash values that are neither the old nor the correct new value.
+**Fix:** Use all three TanStack Query mutation handlers together. Missing any one breaks the contract:
+```js
+// Define queryKey as a constant matching the key used in useQuery
+const POST_QUERY_KEY = ['post', postId]
+
+useMutation({
+  mutationFn: updateFn,
+  onMutate: async () => {
+    await queryClient.cancelQueries({ queryKey: POST_QUERY_KEY })    // cancel in-flight refetches
+    const previous = queryClient.getQueryData(POST_QUERY_KEY)        // snapshot before change
+    queryClient.setQueryData(POST_QUERY_KEY, (old) => ({
+      ...old,
+      likes: old.likes + 1,                                           // apply optimistic change
+    }))
+    return { previous }                                               // return for rollback
+  },
+  onError: (_err, _vars, context) => {
+    queryClient.setQueryData(POST_QUERY_KEY, context.previous)       // rollback on failure
+  },
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: POST_QUERY_KEY })      // always refetch truth
+  },
+})
+```
+`onSettled` refetches the authoritative server value after every mutation — success or failure — eliminating accumulated desync regardless of response order.
+
 ---
 
 ## CATEGORY 7 — WEBSOCKET & REAL-TIME

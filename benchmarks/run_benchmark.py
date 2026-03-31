@@ -14,7 +14,7 @@ RESULTS_DIR = REPO / "benchmarks" / "results"
 SKILL_MD = REPO / "SKILL.md"
 
 SCORING_MODEL = "claude-haiku-4-5-20251001"   # scorer (cheap + fast)
-SUBJECT_MODEL = "claude-sonnet-4-6"            # model being benchmarked
+SUBJECT_MODEL = "claude-sonnet-4-6"            # model being benchmarked — update to latest
 
 SYSTEM_PROMPT_TEMPLATE = """You are running the nuclear-bug-fix skill. 
 Below is the full skill methodology. Apply it precisely when responding.

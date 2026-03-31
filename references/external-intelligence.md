@@ -301,6 +301,33 @@ What to look for:
 
 ---
 
+## SILENT ORM BEHAVIOR CHANGE TRIGGER
+
+**Signal:** ORM write returns success (200/no error), but the field value in the database is unchanged. No exception thrown. Only happens after a major ORM version upgrade.
+
+This pattern bypasses the normal external search triggers (no error message, no exception stack trace). It is easy to misdiagnose as an application bug — wrong query, wrong variable, wrong endpoint.
+
+**What to do immediately — before debugging application code:**
+```
+1. Log the exact ORM query being generated (enable ORM query logging)
+2. Run that exact query directly in the database console
+3. If the direct query works but ORM does not → ORM is transforming the query
+4. Check the ORM's CHANGELOG for the exact major version jump for:
+   - "query transformation" changes
+   - "sanitize" or "filter" behavior changes
+   - null/undefined handling changes
+   - update operator changes ($set, $unset behavior)
+   - strict mode changes
+```
+
+**Common ORM breaking change patterns by library:**
+- **Mongoose 6→7:** `sanitizeFilter` changes affect how null values are treated in updates. `findByIdAndUpdate({ field: null })` may be silently dropped. Use explicit `{ $set: { field: null } }`.
+- **Sequelize 5→6:** `returning` option behavior changed. Raw queries may differ.
+- **Prisma 4→5:** `null` vs `undefined` distinction in updates — `undefined` means "don't update", `null` means "set to null". Swapping them produces silent no-ops.
+- **TypeORM 0.2→0.3:** `update()` behavior for partial updates changed.
+
+**Search query template:** `[ORMName] [version] [field] not updating site:github.com` — or search the ORM's GitHub Issues directly: `is:issue [field] null not persisted`
+
 ## VERSION COMPATIBILITY QUICK REFERENCE
 
 When checking compatibility between commonly paired technologies:

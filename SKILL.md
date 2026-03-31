@@ -601,10 +601,10 @@ log("[DEBUG] ★★★ FIXED CODE EXECUTING v2 ★★★")
 
 **FRONTEND BUG + chrome-devtools-mcp configured?**
 Skip manual log injection. Use MCP tools directly:
-- Console errors → `console_messages`
-- Network request headers/response → `network_requests`
-- DOM state / computed styles → `get_page_source` or `evaluate_js`
-- JS expression evaluation → `evaluate_js`
+- Console errors → use the console messages tool
+- Network request headers/response → use the network requests tool
+- DOM state / computed styles → use evaluate JS or page source tool
+- JS expression evaluation → use evaluate JS tool
 These give the same evidence as forensic logs without modifying the code.
 
 ### 3.9 — DIFFERENTIAL DIAGNOSIS GATE (Mandatory Before Verdict)

@@ -214,31 +214,38 @@ Each pattern: symptom → why → how to prove → how to fix.
 
 ## CATEGORY 8 — KUBERNETES HEALTH PROBE SEMANTICS
 
-### Pattern: Pod marked ready but requests fail for N seconds after start
+### Pattern: Pod marked ready but requests fail — probe checks HTTP not actual dependencies
 
-**Symptom:** Pod passes readiness check immediately. Requests fail for 20-30 seconds. Then healthy.
-**Why:** The readiness endpoint only checks if the HTTP server is listening — not whether Redis, PostgreSQL, or other dependencies are actually connected.
-**Prove:** Call the readiness endpoint manually right after pod starts. Does it return 200? Yes → probe definition is wrong, not the dependencies.
-**Fix:** Make the readiness endpoint actually verify dependency connectivity:
-
+**Symptom:** Pod is `1/1 READY`. Requests fail with connection errors or 5xx immediately after startup, or for 20-30 seconds until dependencies warm up. Restarting the pod temporarily fixes sustained failures. The readiness probe always returns 200.
+**Why:** The readiness endpoint only verifies the HTTP server is listening — no dependency checks. Kubernetes marks the pod ready based on this alone. Redis, PostgreSQL, or other dependencies may not be connected yet.
+**Prove:** While requests are failing: `kubectl exec -it <pod> -- curl -s localhost:<port>/health/ready`. Returns 200 → the probe is lying. Check the handler — if it has no `ping()` or `SELECT 1`, it is not checking real dependencies.
+**Fix:** The readiness endpoint must verify every dependency needed to serve requests:
+```js
+// Node.js / Express — adapt to your ORM/driver
+app.get('/health/ready', async (req, res) => {
+  try {
+    await redis.ping()                    // not just 'redis client exists'
+    await db.query('SELECT 1')           // not just 'db object initialized'
+    // Prisma: await db.$queryRaw`SELECT 1`
+    // Mongoose: await mongoose.connection.db.admin().ping()
+    res.json({ ready: true })
+  } catch (err) {
+    res.status(503).json({ ready: false, error: err.message })
+  }
+})
+```
 ```python
-# FastAPI / Python example
+# FastAPI / Python
 @app.get("/health/ready")
 async def readiness():
-    # Check each dependency explicitly
     try:
-        await redis_client.ping()          # not just "is redis client initialized"
-        await db.execute("SELECT 1")       # not just "is db object created"
+        await redis_client.ping()
+        await db.execute("SELECT 1")
     except Exception as e:
         return JSONResponse(status_code=503, content={"ready": False, "error": str(e)})
     return {"ready": True}
 ```
-
-**Key distinction:**
-- `/health/live` (liveness): Is the process alive? Return 200 if not deadlocked/crashed.
-- `/health/ready` (readiness): Are ALL dependencies reachable? Only 200 when truly ready.
-
-**Common mistake:** Using the same endpoint for both, or having readiness only check HTTP server up.
+**Key rule:** `/health/live` (liveness) = "is the process alive?" — 200 if event loop running. `/health/ready` (readiness) = "can this pod serve real traffic?" — only 200 when ALL dependencies respond. Never use the same endpoint for both.
 
 ### Pattern: Kubernetes pod never becomes ready (readiness probe misconfigured)
 
