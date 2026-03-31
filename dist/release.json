@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.4",
-  "source_commit": "f75baf1567285715d7b4dd9bfd903edd0a98b0c4",
-  "source_commit_short": "f75baf1",
+  "version": "1.4.1",
+  "source_commit": "b0e2f9b0ac076cd85a2952fb3fd77eb83d4188f0",
+  "source_commit_short": "b0e2f9b",
   "source_date": "2026-03-31",
-  "source_subject": "chore: prepare 1.4 release cleanup",
+  "source_subject": "chore: harden updater pipeline for 1.4.1",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
