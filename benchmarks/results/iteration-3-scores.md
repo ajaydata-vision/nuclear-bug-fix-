@@ -12,7 +12,7 @@
 | Medium (70-84) | 0 | 3 | **0** |
 | Low (<70) | 0 | 0 | 0 |
 
-**Goal achieved: zero cases below 85. All 100 cases score 85+.**
+**Goal achieved: zero cases below 85. All 100 cases score 85+ on the benchmark rubric.**
 
 ## Changes Made (Iter 2 → Iter 3)
 
@@ -52,4 +52,4 @@ Further improvement requires either:
 - Running the automated harness (run_benchmark.py) with real Claude API calls to identify which 85s actually score lower in practice
 - Adding infra-specialist reference files (K8s networking, AWS networking patterns)
 
-**Current state: the skill achieves 85+ one-shot rate across all 100 cases.**
+**Current state: the skill achieves 85+ benchmark scores across all 100 iteration-3 cases. This is not a claim that every case is literally one-shot-eligible.**

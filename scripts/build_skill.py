@@ -134,6 +134,7 @@ def resolve_git_metadata(source_commit: str) -> dict[str, str]:
             ["git", "-C", str(REPO_ROOT), "show", "-s", "--format=%H%n%h%n%cs%n%s", source_commit],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
     except subprocess.CalledProcessError:

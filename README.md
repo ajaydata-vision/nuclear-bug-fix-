@@ -43,13 +43,13 @@ It was born from real production debugging sessions where standard code review, 
 
 ```text
 nuclear-bug-fix/
-├── VERSION                               # Current release version (1.3)
-├── CHANGELOG.md                          # 1.3 release notes and 1.4 unreleased bucket
+├── VERSION                               # Current release version (1.4)
+├── CHANGELOG.md                          # 1.4 release notes and release history
 ├── SKILL.md                              # Core methodology - 6 phases, DDx gate, 35 rules
 ├── setup                                 # Root setup entrypoint for git-cloned installs
 ├── setup.ps1                             # Root PowerShell setup entrypoint
-├── references/                           # 8 reference files for patterns, DDx, and external intelligence
-├── benchmarks/                           # 100 benchmark cases plus suite metadata
+├── references/                           # 9 reference files for patterns, DDx, and external intelligence
+├── benchmarks/                           # 127 benchmark cases plus suite metadata
 ├── scripts/
 │   ├── install.py                        # Local repo installer into Claude's skills directory
 │   ├── install.sh                        # One-line installer for macOS/Linux
@@ -62,9 +62,9 @@ nuclear-bug-fix/
     └── release.json                      # Single source of truth for released version metadata
 ```
 
-**Current repo snapshot:** 8 reference files, 100 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
-**Current release:** `1.3`  
-**Next change bucket:** `1.4`
+**Current repo snapshot:** 9 reference files, 127 benchmark cases, and 3,800+ lines across `SKILL.md` and `references/`.
+**Current release:** `1.4`  
+**Release date:** `2026-03-31`
 
 The reference files follow the same pattern language: **Symptom -> Why -> Prove -> Fix**
 
@@ -343,10 +343,10 @@ The full skill currently defines 35 rules in SKILL.md; the list below is the con
 |---|---|
 | SKILL.md structure (6 phases) | ✅ Pass |
 | Domain router + DDx gate present | ✅ Pass |
-| Reference files present (8) | ✅ Pass |
-| Benchmark cases present (100) | ✅ Pass |
+| Reference files present (9) | ✅ Pass |
+| Benchmark cases present (127) | ✅ Pass |
 | Every case has prompt/evaluator/verify | ✅ Pass |
-| Semantic release version (`1.3`) | ✅ Pass |
+| Semantic release version (`1.4`) | ✅ Pass |
 | Deterministic artifact validation | ✅ Pass |
 | Release manifest ↔ packaged version alignment | ✅ Pass |
 
@@ -375,16 +375,15 @@ If this skill saves your team hours of debugging, a ⭐ on the repo would be app
 ---
 
 ## 🙏 Acknowledgements
- 
-Methodology developed through real production debugging experience
-of Software Developers in various IT companies and highly technical team at
-[Data Ingenious Technologies](https://www.data.in).
+Built with [Claude Code](https://claude.ai/code) by Anthropic.  
+Methodology developed through real production debugging sessions at  
+[Data Ingenious Technologies](https://www.dataingenious.com).
 
 ---
 
 <p align="center">
   <strong>Created by Dr. Ajay Data · Data Ingenious Technologies · Jaipur, India</strong><br/>
-  <a href="https://www.data.in">dataingeniou</a> ·
+  <a href="https://www.dataingenious.com">dataingenious.com</a> ·
   <a href="https://www.xgenplus.com">xgenplus.com</a> ·
   <a href="https://github.com/ajaydata-vision">github.com/ajaydata-vision</a>
 </p>

@@ -1,6 +1,7 @@
 # Java Benchmark Self-Evaluation
 # Method: Claude applies skill to each prompt, scores against evaluator ground truth
 # Date: 2026-03-31
+# Note: manual case-by-case self-evaluation summary, not a raw run_java.py output artifact
 
 ## Scoring rationale per case
 
@@ -248,7 +249,8 @@ The two lowest scores reflect genuine limitations correctly identified in the ga
 - **JT-001 (85)**: JVM crash diagnosis correct from hs_err excerpt, but complete fix
   requires external vendor search (Phase 3.6) — not a reference file answer.
 
-Both scores are appropriate. The skill routes them correctly (Phase 2A → java-enterprise →
-correct category), reaches the right root cause, and gives the right fix. The deductions
-reflect evidence discipline and the one-shot constraint, not diagnostic failure.
+This manual self-evaluation supports strong first-response Java coverage across all 27 cases.
+It is not a literal 27/27 one-shot-fix claim: WF-001 and JT-001 are explicitly marked
+one_shot_eligible=false, so their passing scores reflect correct routing, diagnosis, and
+fix direction under the benchmark rubric rather than full one-shot eligibility.
 

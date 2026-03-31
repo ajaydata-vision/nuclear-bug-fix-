@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.4] - Unreleased
+## [1.4] - 2026-03-31
 
 ### Phase 2 Additions (WebFlux, ORM, JVM)
 - Extended `references/java-patterns.md` with Category 8 (ORM/JPA: N+1, optimistic locking, bidirectional mapping) and Category 9 (WebFlux: blocking-in-reactive, switchIfEmpty, ReactiveSecurityContextHolder).
@@ -8,6 +8,12 @@
 - Extended SKILL.md Phase 3.6 with app-server (JBoss/WebLogic/GlassFish) and WebFlux/BlockHound search triggers.
 - Added 7 new benchmark cases: WF-001..003 (WebFlux), OR-001..003 (ORM/JPA), JT-001 (JVM crash).
 - Updated benchmarks/index.yaml: 120→127 cases, java-enterprise domain 20→27.
+
+### Release Readiness Cleanup
+- Reconciled README release metadata, case counts, and project links for the 1.4 ship target.
+- Tightened benchmark wording to distinguish 85+ rubric scores from literal one-shot eligibility.
+- Corrected `benchmarks/index.yaml` domain counts to match the committed evaluator corpus.
+- Rebuilt the shipped `dist` artifacts and release manifest for 1.4.
 
 ### Java Enterprise Support
 - Added `references/java-patterns.md` — 7 categories, 25 patterns covering Servlet lifecycle/threading, JSP scope/include/EL, NIO ByteBuffer/Channel/Selector, Java threading (ThreadLocal, InterruptedException, Executor rejection, wait/notify), JVM ClassLoader/OOM, JDBC/HikariCP/JNDI, Spring Boot (@Transactional self-invocation, LazyInitializationException, bean scope, Security filter chain).

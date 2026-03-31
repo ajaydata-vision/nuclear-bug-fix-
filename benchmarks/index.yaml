@@ -30,7 +30,7 @@ domains:
   - id: backend
     current_cases: 31
   - id: integration
-    current_cases: 27
+    current_cases: 20
   - id: mobile
     current_cases: 2
   - id: general
