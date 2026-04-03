@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.7] - 2026-04-03
+
+### Java & React Native — Single-Shot Coverage Completion
+
+**Java (`references/java-patterns.md`):**
+- Added Category 10 — Spring Async/Scheduling/Caching: 5 patterns covering `@Async` silent execution, `@Async` void exception swallowing, `@Scheduled` not firing, `@Cacheable` stale data, `@PreAuthorize` SpEL silent 403.
+- Added Category 11 — Spring Boot 3 / Jakarta EE migration: 2 patterns covering `javax→jakarta` ClassNotFoundException and `@HttpExchange` error handling change.
+- Added Category 12 — Kafka/Messaging: 4 patterns covering wrong group.id/offset.reset, consumer group rebalance storm, transactional producer not committed, poison pill deserialization blocking partition.
+- Added Category 13 — Java 21 Virtual Threads: 2 patterns covering `synchronized` pinning of carrier threads and ThreadLocal/ScopedValue migration for request-scoped state.
+- Added Prove sections to `OutOfMemoryError` and thread dump patterns (previously diagnostic-only, now have targeted smoking-gun Prove steps).
+- Java patterns: 46 patterns total, 100% Prove coverage.
+
+**React Native (`references/react-native-patterns.md`) — new file:**
+- 9 categories, 26 patterns, 100% Prove coverage.
+- Category 1: Metro & Build — cache corruption, duplicate module, Hermes console.log strip.
+- Category 2: React Navigation — params undefined, goBack wrong screen, remount on navigate, deep link cold start.
+- Category 3: FlatList & Performance — keyExtractor missing, getItemLayout wrong, removeClippedSubviews blank areas.
+- Category 4: Animated & Reanimated — useNativeDriver layout crash, worklet UI thread violation, animation loop memory leak.
+- Category 5: Expo & EAS — native module missing in standalone, env variable undefined in EAS, OTA update stale code.
+- Category 6: State & AsyncStorage — null on first install, Redux selector stale reference, useEffect async stale update.
+- Category 7: Platform & Permissions — iOS Info.plist missing, Android manifest missing, iOS safe area notch.
+- Category 8: Native Modules & Architecture — release build null, New Architecture TurboModule incompatibility.
+- Category 9: Development Tooling — debugger interference, Fast Refresh stale state.
+
+**SKILL.md routing:**
+- Phase 2A: React Native now has its own dedicated row with 20+ routing signals pointing to `references/react-native-patterns.md`. Old Mobile row retained for non-RN native apps.
+- Phase 4: React Native reference file added to domain router table with full signal description.
+
+**v1.6 wiring confirmed active:** Targeted-Prove-First in Phase 3.8 now fires for all 72 Java + React Native patterns with complete Prove sections — single-shot HIGH confidence path is fully operational for these domains.
+
 ## [1.5] - 2026-03-31
 
 ### Desktop / Bridge / Packaging Coverage

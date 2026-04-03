@@ -269,6 +269,14 @@ log.debug("target class loader: {}", TargetType.class.getClassLoader());
 
 ### Pattern: OutOfMemoryError — identify which memory pool to find the right fix
 **Symptom:** JVM crashes with `OutOfMemoryError`. Must identify which pool to find the correct fix.
+**Prove:** The OOM error message text IS the diagnostic — read it literally:
+```
+java.lang.OutOfMemoryError: Java heap space          → objects not GC'd (heap leak)
+java.lang.OutOfMemoryError: Metaspace                → class metadata overflow (dynamic class gen)
+java.lang.OutOfMemoryError: Direct buffer memory     → NIO ByteBuffer.allocateDirect() not released
+java.lang.OutOfMemoryError: GC overhead limit exceeded → variant of heap space, GC spending >98% time
+```
+Enable heap dump for heap space errors: add `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/app/` to JVM args. On next OOM, open `.hprof` in Eclipse MAT or VisualVM — dominator tree shows what is holding memory.
 **Diagnosis by error message:**
 - `Java heap space` → objects not GC'd. Enable heap dump, analyze with Eclipse MAT or VisualVM. Look for unbounded caches, event listeners never removed, static collections.
 - `Metaspace` → class metadata overflow. Dynamic class generation (JSP compilation, CGLib proxies, Groovy) without corresponding ClassLoader cleanup. Find the ClassLoader that is not being collected.
@@ -280,6 +288,18 @@ log.debug("target class loader: {}", TargetType.class.getClassLoader());
 ```
 
 ### Pattern: Reading a thread dump — deadlock and hung thread diagnosis
+**Prove:** Capture and read the thread dump:
+```bash
+jcmd <pid> Thread.print        # JDK 17+, preferred
+jstack -l <pid>                # classic, includes lock ownership
+kill -3 <pid>                  # SIGQUIT — dumps to stdout (non-destructive)
+```
+**Find PID:** `jps -l | grep YourApp`
+**Smoking gun per state:**
+- `BLOCKED (on object monitor)` with "waiting to lock" + "locked by" on same address → deadlock or contention. Owner thread is named.
+- `TIMED_WAITING` in executor threads → idle workers (normal) OR `InterruptedException` swallowed (check catch block).
+- `RUNNABLE` flood in same method → CPU bottleneck at that method.
+- Deadlock: `jstack -l` prints `Found one Java-level deadlock:` automatically.
 **Capture:**
 ```bash
 jcmd <pid> Thread.print        # JDK 17+, preferred
@@ -546,4 +566,197 @@ String user = SecurityContextHolder.getContext().getAuthentication().getName();
 return ReactiveSecurityContextHolder.getContext()
     .map(ctx -> ctx.getAuthentication().getName())
     .flatMap(username -> service.doWork(username));
+```
+
+---
+
+## CATEGORY 10 — SPRING ASYNC, SCHEDULING & CACHING
+
+### Pattern: @Async method executes synchronously — @EnableAsync missing
+**Symptom:** Method annotated `@Async` blocks the calling thread. Returns `CompletableFuture` but caller waits for it to finish. No error, no exception — it just runs synchronously and callers see it as slow.
+**Why:** `@Async` is AOP-based. Without `@EnableAsync` on a `@Configuration` class, the annotation is parsed but the proxy is never woven. The method executes on the caller's thread exactly as if the annotation were absent.
+**Prove:** Add inside the async method: `log.debug("[ASYNC] thread={}", Thread.currentThread().getName())`. If thread name is the caller's thread (e.g., `http-nio-8080-exec-3`) instead of a pool thread (e.g., `task-1`) → `@EnableAsync` is missing or the proxy is bypassed via self-invocation.
+**Fix:**
+```java
+@Configuration
+@EnableAsync  // ← this is required
+public class AsyncConfig { }
+```
+Also applies to self-invocation: calling an `@Async` method from within the same bean bypasses the proxy. Extract to a separate bean.
+
+### Pattern: @Async exception silently swallowed — AsyncUncaughtExceptionHandler not set
+**Symptom:** `@Async` void method throws an exception. Nothing happens. No log, no alert, no retry. Business operation silently not performed.
+**Why:** For `@Async` methods returning `void`, exceptions cannot propagate to the caller (there is no return channel). Spring discards them unless an `AsyncUncaughtExceptionHandler` is configured.
+**Prove:** Add a try/catch inside the async method that logs any exception. If exceptions appear that were previously invisible → `AsyncUncaughtExceptionHandler` is missing.
+**Fix:**
+```java
+@Configuration
+@EnableAsync
+public class AsyncConfig implements AsyncConfigurer {
+    @Override
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return (ex, method, params) ->
+            log.error("[ASYNC] Uncaught exception in {}: {}", method.getName(), ex.getMessage(), ex);
+    }
+}
+```
+
+### Pattern: @Scheduled method not executing — @EnableScheduling missing
+**Symptom:** Method annotated `@Scheduled(fixedRate=...)` or `@Scheduled(cron=...)` never runs. No error. Silence.
+**Why:** Same root cause as `@Async`: without `@EnableScheduling`, the annotation is recognized but no scheduler is started. The task is registered nowhere.
+**Prove:** Add `@EventListener(ApplicationReadyEvent.class) public void check() { log.info("Scheduler active: {}", schedulingTaskRegistrar != null); }`. More directly: if no log from the `@Scheduled` method ever appears, add `log.info("[SCHED] tick at {}", Instant.now())` as the first line. If it never prints → scheduler not started.
+**Fix:** Add `@EnableScheduling` to any `@Configuration` class. For Spring Boot apps, adding it to the main `@SpringBootApplication` class is sufficient.
+
+### Pattern: @Cacheable returns stale data — cache not invalidated after write
+**Symptom:** Update operation succeeds (DB shows new value). Subsequent read returns old value. Restarting app returns correct value. Only one specific endpoint is stale.
+**Why:** `@Cacheable` stores the return value keyed by method arguments. `@CacheEvict` on the write method must use the SAME cache name and SAME key expression. Mismatch → write evicts a different key, read continues hitting the stale cached entry.
+**Prove:**
+```java
+// Add to the @Cacheable method — log what key is actually being used
+@Cacheable(value = "users", key = "#id")
+public User getUser(Long id) {
+    log.debug("[CACHE] MISS — loading from DB, key={}", id);
+    return repo.findById(id).orElseThrow();
+}
+// If log never appears after first call → cache is hitting. 
+// After an update, if log still never appears → eviction is not working.
+// Also: log.debug("[CACHE] evicting key={}", id) in the @CacheEvict method.
+// If evict log appears but get log does NOT appear next call → different key in use.
+```
+**Fix:** Ensure `value` (cache name) and `key` SpEL expression are identical between `@Cacheable` and `@CacheEvict`. Use `@CacheConfig(cacheNames="users")` at class level to avoid mismatch.
+
+### Pattern: @PreAuthorize expression fails silently — SpEL error returns 403 not 500
+**Symptom:** Endpoint returns 403 Forbidden for a user who should have access. No exception logged. Security debug shows access denied but no reason.
+**Why:** `@PreAuthorize("hasRole('ADMIN')")` uses Spring Expression Language. A SpEL error (wrong role name, method not found on principal) evaluates to `false` rather than throwing — access is denied silently. Also: role names differ by convention (`ROLE_ADMIN` vs `ADMIN`).
+**Prove:** Enable `logging.level.org.springframework.security=TRACE`. Output shows the exact SpEL expression evaluated and the result. Also log `SecurityContextHolder.getContext().getAuthentication().getAuthorities()` inside the controller to see actual granted roles vs expected role string.
+**Fix:** Match role string exactly. `hasRole('ADMIN')` prepends `ROLE_` automatically — so the authority must be `ROLE_ADMIN`. `hasAuthority('ROLE_ADMIN')` matches literally. Use one convention everywhere.
+
+---
+
+## CATEGORY 11 — SPRING BOOT 3 / JAKARTA EE MIGRATION
+
+### Pattern: ClassNotFoundException on javax.* after Spring Boot 3 upgrade
+**Symptom:** App compiled and ran on Spring Boot 2.x. After upgrading to Spring Boot 3.x, starts throwing `ClassNotFoundException: javax.servlet.http.HttpServletRequest` or similar `javax.*` class at runtime despite no code changes.
+**Why:** Spring Boot 3 requires Jakarta EE 9+ which renamed all `javax.*` packages to `jakarta.*`. Any dependency still using `javax.*` is incompatible. Mixing is impossible — both cannot coexist.
+**Prove:** Run `mvn dependency:tree | grep javax` (or Gradle equivalent). Any library still on the `javax.*` namespace is the culprit. Also: check the exception stack trace — the class loading the missing `javax.*` type is the incompatible library.
+**Fix:** Upgrade all dependencies to Jakarta EE 9-compatible versions. Key upgrades: Hibernate 6+, Tomcat 10+, any persistence/validation library. For libraries with no Jakarta version: keep on Spring Boot 2.x or find a replacement. Use `jakarta.servlet.*`, `jakarta.persistence.*`, `jakarta.validation.*` in your own code.
+
+### Pattern: Spring Boot 3 @HttpExchange / HTTP Interface client returns wrong type
+**Symptom:** HTTP Interface client (new in Spring Boot 3, replaces Feign) compiles fine but returns null, wrong type, or throws `HttpClientErrorException` that was previously handled. Error handling behavior changed.
+**Why:** Spring Boot 3's `@HttpExchange` wraps errors differently from OpenFeign. 4xx/5xx responses throw `WebClientResponseException` subclasses, not Feign's `FeignException`. Error decoder customization must use `WebClient`-level error handling, not Feign's `ErrorDecoder`.
+**Prove:** Log the full response status and body in a `WebClient` `onStatus` handler. If 4xx arrives but exception type is different from what catch blocks expect → error type mismatch between Feign and HttpExchange confirmed.
+**Fix:**
+```java
+WebClient client = WebClient.builder()
+    .defaultStatusHandler(HttpStatusCode::isError,
+        resp -> resp.bodyToMono(String.class)
+            .map(body -> new MyApiException(resp.statusCode(), body)))
+    .build();
+```
+
+---
+
+## CATEGORY 12 — KAFKA / MESSAGING PATTERNS
+
+### Pattern: Kafka consumer not receiving messages — wrong group.id or auto.offset.reset
+**Symptom:** Producer sends messages (confirmed in producer logs). Consumer application starts with no error. No messages received. Consumer log shows `Assigned partitions: []` or shows partition assigned but no poll output.
+**Why:** Two root causes with identical symptom: (1) `group.id` mismatch — consumer subscribes as a different group than the one that has an offset committed, so it starts at `latest` and misses all prior messages. (2) `auto.offset.reset=latest` with a new consumer group — no committed offset exists, consumer starts from the end, never sees messages produced before it started.
+**Prove:**
+```bash
+# Check what offsets the consumer group actually has
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+  --group <your-group-id> --describe
+# LAG column: if LAG=0 and no messages received → messages consumed before consumer started (offset.reset=latest)
+# If group not listed → group.id in code doesn't match what you think
+# Also log inside @KafkaListener: log.debug("[KAFKA] received topic={} partition={} offset={}", r.topic(), r.partition(), r.offset())
+# If this never prints → listener not reached
+```
+**Fix:** For a new consumer group that must read from the beginning: set `auto.offset.reset=earliest`. For production: never use `latest` on a new consumer group without explicit offset management. Set `group.id` explicitly in `application.yml` — never rely on default.
+
+### Pattern: Kafka consumer group rebalance storm — listener processing slower than session timeout
+**Symptom:** Consumer processes some messages then stops. Logs show repeated `Revoked partitions` / `Assigned partitions` cycles. Messages processed multiple times (duplicate processing). Lag grows despite consumer running.
+**Why:** Kafka's consumer coordinator requires a heartbeat within `session.timeout.ms` (default 10s). If message processing takes longer than this, the coordinator declares the consumer dead, triggers rebalance, reassigns partitions, and another consumer picks up from last committed offset. That consumer also times out. Loop.
+**Prove:** Log the processing time of every message: `long start = System.currentTimeMillis(); process(record); log.debug("[KAFKA] processed in {}ms", System.currentTimeMillis()-start)`. If any message exceeds `session.timeout.ms` → rebalance trigger confirmed. Also check `max.poll.interval.ms` (default 5 minutes) — exceeded when batch too large.
+**Fix:**
+```yaml
+spring.kafka.consumer:
+  max-poll-records: 10          # reduce batch size
+  properties:
+    max.poll.interval.ms: 300000  # increase if processing is legitimately long
+    session.timeout.ms: 30000
+    heartbeat.interval.ms: 10000
+```
+For long processing: commit offset after each record, not after the batch. Use `AckMode.RECORD` in `ContainerProperties`.
+
+### Pattern: Kafka message silently not produced — transaction not committed
+**Symptom:** Producer code executes with no exception. Messages appear in local log. Consumer never receives them. `kafka-console-consumer` also shows nothing.
+**Why:** If the producer is configured with transactions (`transactional.id` set), messages are only visible to consumers with `isolation.level=read_committed` AFTER the transaction commits. If transaction is never committed (missing `@Transactional`, exception before commit, or `KafkaTemplate` not flushing), messages are buffered indefinitely.
+**Prove:**
+```java
+// Log the send result explicitly — don't fire-and-forget
+kafkaTemplate.send(topic, key, value)
+    .whenComplete((result, ex) -> {
+        if (ex != null) log.error("[KAFKA] send failed: {}", ex.getMessage());
+        else log.debug("[KAFKA] sent offset={}", result.getRecordMetadata().offset());
+    });
+// If "sent offset" never appears → message never reached broker
+// If offset appears but consumer doesn't see it → transaction not committed
+```
+Also: temporarily set `isolation.level=read_uncommitted` on consumer to see if uncommitted messages are present.
+**Fix:** Ensure `kafkaTemplate.send()` result is awaited or callback is checked. For transactional producers: annotate the method with `@Transactional` and ensure no exception exits before the method returns normally.
+
+### Pattern: @KafkaListener deserializaton error — poison pill stops entire partition
+**Symptom:** Consumer processes messages normally then permanently stops on one partition. Error log shows `SerializationException` or `JsonParseException`. All subsequent messages in that partition are skipped. No more processing from that partition.
+**Why:** A malformed message (wrong schema, wrong type, corrupted bytes) causes deserialization to throw on every poll attempt. Kafka retries the same offset indefinitely. The partition is permanently blocked — a "poison pill."
+**Prove:** Log the raw bytes of the failing message: enable `ErrorHandlingDeserializer` which catches the exception and delivers a `DeserializationException` header with the raw bytes. Check the consumer lag for that specific partition — if it stops moving while others advance, the partition is blocked.
+**Fix:**
+```java
+// application.yml — use ErrorHandlingDeserializer to prevent poison pill blocking
+spring.kafka.consumer.value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+spring.kafka.consumer.properties.spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+
+// In listener — check for deserialization error header
+@KafkaListener(topics = "my-topic")
+public void listen(ConsumerRecord<String, Object> record) {
+    Header errorHeader = record.headers().lastHeader(SerializationUtils.DESERIALIZER_EXCEPTION_HEADER);
+    if (errorHeader != null) {
+        log.error("[KAFKA] poison pill at offset={}, sending to DLQ", record.offset());
+        dlqTemplate.send("my-topic.DLQ", record.key(), record.value());
+        return;
+    }
+    process((MyEvent) record.value());
+}
+```
+
+---
+
+## CATEGORY 13 — JAVA 21 VIRTUAL THREADS (PROJECT LOOM)
+
+### Pattern: Virtual thread pinned to carrier thread — synchronized block kills scalability
+**Symptom:** Application migrated to Java 21 virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`). Under load, throughput is no better than platform threads — sometimes worse. Thread dump shows many virtual threads in WAITING state on a small number of carrier threads.
+**Why:** Virtual threads are lightweight unless they hit a `synchronized` block or `synchronized` method — at that point they "pin" the carrier thread (an OS thread). The virtual thread cannot unmount from the carrier while holding a monitor lock. This converts a potentially-M:N concurrency model back to 1:1 for pinned threads, destroying the scalability benefit.
+**Prove:**
+```bash
+# Enable JVM pinning diagnostics — add to JVM args
+-Djdk.tracePinnedThreads=full
+
+# Output when pinning occurs:
+# Thread[#24,ForkJoinPool-1-worker-1,5,CarrierThreads]
+#   java.base/java.lang.Object.wait(Object.java) @bci=0
+#       com.example.MyService.doWork(MyService.java:42) <== synchronized method
+# Count unique "synchronized" frames in output — high count = scalability bottleneck
+```
+**Fix:** Replace `synchronized` blocks with `ReentrantLock` (which supports virtual thread unmounting). Alternatively, use `Semaphore` for rate limiting. For third-party libraries that use `synchronized` internally: check for updated versions that use `java.util.concurrent` primitives.
+
+### Pattern: Virtual thread + ThreadLocal — state leaks between unrelated requests
+**Symptom:** After migrating to virtual threads, per-request data (MDC fields, user context, tenant ID) occasionally appears in unrelated requests. Symptom identical to the servlet singleton state pollution bug but the fix is different.
+**Why:** Virtual threads are created per-task and should not share ThreadLocals with other tasks. However: if a thread pool is reused (e.g., a bounded virtual thread executor), or if `InheritableThreadLocal` is used, child virtual threads inherit parent's state. Web frameworks that create virtual threads from a thread pool that had prior request state cause cross-contamination.
+**Prove:** Log `MDC.getCopyOfContextMap()` at the START of each request handler BEFORE setting any MDC values. If any prior request's MDC values appear at the start of a new request → ThreadLocal leak confirmed. Log `Thread.currentThread().isVirtual()` to confirm virtual threads are in use.
+**Fix:** Use `ScopedValue` (Java 21 preview, Java 23 final) instead of `ThreadLocal` for request-scoped state. Clear ThreadLocals explicitly in a filter before and after each request. Prefer `ThreadLocal` over `InheritableThreadLocal` to prevent child thread inheritance.
+```java
+// Correct pattern for virtual thread request context
+static final ScopedValue<RequestContext> REQUEST_CTX = ScopedValue.newInstance();
+
+ScopedValue.where(REQUEST_CTX, new RequestContext(userId, tenantId))
+    .run(() -> service.handleRequest()); // context automatically scoped to this call tree
 ```

@@ -205,7 +205,8 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | Domain | Signals | Reference File |
 |---|---|---|
 | **Frontend** | UI not rendering, CSS broken, component state wrong, hydration error, bundle error, browser-only bug, routing broken, form not submitting, WebSocket UI issue | `references/frontend-patterns.md` |
-| **Mobile** | App crash, React Native bridge error, iOS/Android specific behavior, device permission, push notification, offline sync, memory warning on device | `references/frontend-patterns.md` + mobile section |
+| **React Native** | Metro bundler error, module resolution failure, React Navigation params wrong/undefined, FlatList jank or blank items, Animated/Reanimated crash, Expo Go vs EAS build difference, AsyncStorage null on first launch, native module undefined in release, New Architecture (JSI/TurboModule) error, platform permission silent fail, iOS notch/safe area, deep link wrong screen, Fast Refresh stale state | `references/react-native-patterns.md` |
+| **Mobile (generic)** | App crash, iOS/Android specific behavior (non-React-Native), push notification, offline sync, memory warning on device | `references/frontend-patterns.md` + mobile section |
 | **Backend** | API response wrong, auth failing, DB issue, background job silent, queue not consumed, file upload broken, rate limit wrong, session bug, ORM query wrong | `references/backend-patterns.md` |
 | **Python Desktop/UI** | PyQt6 widget update wrong, qasync slot never resumes, UI freezes during network/file/email action, QObject thread affinity error, app hangs on exit, desktop websocket/scheduler interaction broken | `references/python-desktop-patterns.md` |
 | **Bridge / Adapter / Unofficial Client** | Python process talks to Node subprocess, stdout/stderr framed protocol, WhatsApp/Baileys bridge, websocket relay, scraper suddenly returns empty data, connected but no events, first event missing, duplicate event after reconnect | `references/bridge-adapter-patterns.md` |
@@ -1045,7 +1046,8 @@ Always load ALL files relevant to the bug — never just one if multiple apply.
 
 | File | When to Load | Contents |
 |---|---|---|
-| `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing/mobile bug | Rendering, hydration, state, CSS, forms, WebSocket, browser compat, performance |
+| `references/react-native-patterns.md` | Any React Native bug: Metro bundler, React Navigation, FlatList/lists, Animated/Reanimated, Expo/EAS, AsyncStorage, native modules, New Architecture (JSI), platform permissions, Hermes, Fast Refresh | Metro cache, navigation stack, list rendering, worklet crashes, build environment, state/storage, native linking, debug interference |
+| `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing bug, generic mobile (non-RN) | Rendering, hydration, state, CSS, forms, WebSocket, browser compat, performance |
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/python-desktop-patterns.md` | PyQt6/qasync/UI-thread-affinity/desktop scheduler or websocket bugs | Loop ownership, async slots, UI freezes, shutdown cleanup, desktop SQLite usage |
 | `references/bridge-adapter-patterns.md` | Python<->Node bridges, stdout-framed protocols, reconnect/listener bugs, unofficial client/scraper drift | IPC lifecycle, framing discipline, reconnect ordering, provider drift handling |
