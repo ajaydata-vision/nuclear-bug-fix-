@@ -200,7 +200,7 @@ Pick the top 2 most likely categories before proceeding.
 
 ### 2A — Domain Classification (Route to Correct Reference File)
 
-Identify the domain FIRST — determines which reference file to load in Phase 4.
+Identify the domain FIRST — determines which reference file to load.
 
 | Domain | Signals | Reference File |
 |---|---|---|
@@ -214,6 +214,21 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect, @Async method running synchronously, @Scheduled never fires, Spring cache returning stale data, Kafka consumer not receiving messages, consumer rebalance storm, virtual thread throughput not improving, javax.* ClassNotFoundException after Spring Boot 3 upgrade | `references/java-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
+
+**Immediately after identifying the domain — load the reference file and identify candidate patterns:**
+```
+PATTERN PRE-LOAD (run at Phase 2A, not Phase 4):
+1. Load the reference file for the identified domain NOW.
+2. Scan every pattern's Symptom heading.
+3. Identify the 1–2 patterns whose Symptom most closely matches the intake description.
+   Record as CP-1 (top candidate) and CP-2 (second candidate).
+4. Read CP-1's Why section. This informs the entire Phase 3:
+   - Phase 3.6: search for CP-1's specific error signatures and library names
+   - Phase 3.7: surface the assumptions that CP-1's Why section identifies as risky
+   - Phase 3.8: use CP-1's Prove as the primary forensic ask
+   If CP-1's Prove output doesn't match → CP-2 becomes primary. Re-read its Why and Prove.
+```
+This pre-load is what converts Phase 3 from generic diagnosis to pattern-targeted single-shot.
 
 Multiple domains? Load ALL relevant files. Frontend bug calling backend API = load both.
 Desktop app spawning Node bridge from a packaged `.exe` usually means:
@@ -1045,8 +1060,10 @@ FLIP YOUR ASSUMPTION: If you're convinced the bug is in Module A →
 
 ## PHASE 4 — DEEP PATTERN REFERENCE (Domain Router)
 
-Load the reference file(s) matching the domain identified in Phase 2A.
-Always load ALL files relevant to the bug — never just one if multiple apply.
+The reference file was already loaded at Phase 2A. This phase is for **comprehensive review** — re-read it fully to catch any patterns the targeted Prove in Phase 3.8 may have missed, or to confirm the Prove result maps to exactly one pattern.
+
+If the Phase 3.8 Prove matched cleanly → use Phase 4 to verify no alternative pattern in the same file produces an identical Prove output (sanity check before verdict).
+If the Phase 3.8 Prove was inconclusive → scan all patterns in the file now to find the next best candidate.
 
 | File | When to Load | Contents |
 |---|---|---|

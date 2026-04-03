@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+## [1.9] - 2026-04-03
+
+### End-to-End Trace — 4 Remaining Issues Fixed
+
+Full end-to-end adversarial trace of the single-shot path across 4 real bug scenarios
+revealed 4 remaining structural and content issues.
+
+**SKILL.md — Phase 2A (structural, highest impact):**
+- Issue 1 (Critical): Reference file was loaded at Phase 3.8, but Phases 3.6 (external
+  intelligence) and 3.7 (find the lies) had already run without knowing the candidate
+  pattern. External searches were generic. Assumption lists were generic. Targeted Prove
+  fired 5 steps too late.
+  Fix: Added PATTERN PRE-LOAD block to Phase 2A. Reference file now loads immediately
+  after domain identification. CP-1 and CP-2 candidate patterns identified at Phase 2A.
+  Phase 3.6 now searches CP-1's specific error signatures. Phase 3.7 surfaces CP-1's
+  risky assumptions. Phase 3.8 Prove is the culmination of a fully pattern-informed
+  Phase 3 — not the first time the pattern is consulted.
+- Issue 3 (Medium): Phase 2A header said "determines which reference file to load in
+  Phase 4" — wrong since v1.8 moved the load to Phase 3.8. Fixed: removed "in Phase 4".
+
+**SKILL.md — Phase 4 (medium):**
+- Issue 4: Phase 4 still said "Load the reference file" — redundant and confusing after
+  v1.8 + v1.9 pre-load changes. Rewritten: Phase 4 is now explicitly "comprehensive
+  review" — file already in context, re-read fully to catch anything the targeted Prove
+  missed, or verify the Prove maps to exactly one pattern.
+
+**references/java-patterns.md — @Async Prove (high):**
+- Issue 2: @Async method executes synchronously Prove said "thread is caller's thread →
+  @EnableAsync missing OR self-invocation." Two different root causes, same output, 
+  different fixes. Gate could not reach HIGH confidence — stalled at MEDIUM.
+  Fix: Two-step discriminator. Step 1: grep for @EnableAsync (structural, no code run).
+  If absent → confirmed, add @EnableAsync, done. Step 2 (only if @EnableAsync present):
+  check call site for same-class invocation. Runtime log only if needed to confirm.
+  Now produces HIGH confidence verdict for both root causes.
+
+**Single-shot HIGH confidence path is now fully wired end-to-end:**
+Phase 2A: domain → load file → identify CP-1/CP-2 → read Why →
+Phase 3.6: targeted external search using CP-1 signatures →
+Phase 3.7: CP-1-informed assumption list →
+Phase 3.8: CP-1 Prove delivered →
+Phase 3.9: Prove output → fast-path if discriminating, gate if narrowing →
+Phase 3.10: HIGH or MEDIUM verdict with explicit proof statement.
+
 ## [1.8] - 2026-04-03
 
 ### Adversarial Review — 12 Defects Fixed

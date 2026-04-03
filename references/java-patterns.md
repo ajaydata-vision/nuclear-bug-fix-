@@ -575,7 +575,12 @@ return ReactiveSecurityContextHolder.getContext()
 ### Pattern: @Async method executes synchronously — @EnableAsync missing
 **Symptom:** Method annotated `@Async` blocks the calling thread. Returns `CompletableFuture` but caller waits for it to finish. No error, no exception — it just runs synchronously and callers see it as slow.
 **Why:** `@Async` is AOP-based. Without `@EnableAsync` on a `@Configuration` class, the annotation is parsed but the proxy is never woven. The method executes on the caller's thread exactly as if the annotation were absent.
-**Prove:** Add inside the async method: `log.debug("[ASYNC] thread={}", Thread.currentThread().getName())`. If thread name is the caller's thread (e.g., `http-nio-8080-exec-3`) instead of a pool thread (e.g., `task-1`) → `@EnableAsync` is missing or the proxy is bypassed via self-invocation.
+**Prove:** Two-step discrimination — these two causes produce identical runtime symptoms but have different structural signatures:
+
+**Step 1 — structural check (no code changes needed):**
+Search the entire codebase for `@EnableAsync`. If absent from every `@Configuration` class → confirmed: proxy never woven. Fix: add `@EnableAsync`. Stop here, no need for Step 2.
+
+**Step 2 — if @EnableAsync IS present:** The cause is self-invocation. Confirm by finding the call site — is the `@Async` method being called from within the SAME class (`this.asyncMethod()`)? Self-invocation bypasses the AOP proxy regardless of `@EnableAsync`. Runtime confirmation: `log.debug("[ASYNC] thread={}", Thread.currentThread().getName())` inside the async method. If thread name matches the caller's thread (e.g., `http-nio-8080-exec-3` instead of `task-1`) AND `@EnableAsync` is present → self-invocation confirmed.
 **Fix:**
 ```java
 @Configuration
