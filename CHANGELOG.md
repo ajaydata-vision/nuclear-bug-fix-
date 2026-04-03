@@ -2,7 +2,24 @@
 
 ## [Unreleased]
 
-## [1.9] - 2026-04-03
+## [1.10] - 2026-04-03
+
+### JSP + JavaScript/Frontend Single-Shot Coverage
+
+**references/java-patterns.md — 3 new JSP patterns (Category 2):**
+- JSTL taglib declaration missing — tags render as literal text (covers javax vs jakarta URI mismatch, JAR presence check, Spring Boot 2 vs 3 URI difference)
+- JSP forward vs redirect wrong choice — double-submit, data loss, POST-Redirect-GET pattern with browser F5 diagnostic
+- JSP EL output unescaped — XSS / broken HTML from user input, `<c:out>` vs bare `${expr}`, `fn:escapeXml`
+
+**references/frontend-patterns.md — 11 new patterns, 3 new categories:**
+- SW/CDN pattern: removed orphaned duplicate Signal content below Prove section
+- Category 13 — Vanilla JS & DOM: addEventListener null element, event delegation e.target/closest, `this` context loss, async forEach no-op (returns undefined)
+- Category 14 — Promise & Async: fetch() no throw on 4xx/5xx, response.json() on 204, Promise.all fail-fast vs allSettled, unhandled promise rejection global handler
+- Category 15 — Modern JS & TypeScript: circular import undefined (with madge detection), TypeScript `as` assertion hides null, dynamic import() chunk 404 with sessionStorage-guarded reload
+
+Coverage: 241 patterns, 0 missing Prove, 100% across all reference files.
+
+
 
 ### End-to-End Trace — 4 Remaining Issues Fixed
 

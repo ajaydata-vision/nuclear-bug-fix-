@@ -111,7 +111,13 @@ ${user.name}   // works
 ### Pattern: JSTL tag renders as literal text — taglib declaration missing or wrong URI
 **Symptom:** `<c:forEach>`, `<c:if>`, `<c:out>` render on screen as plain text, not as processed output. Or: `javax.servlet.jsp.JspException: The absolute uri: http://java.sun.com/jsp/jstl/core cannot be resolved`.
 **Why:** JSTL requires two things: (1) `<%@ taglib uri="..." prefix="c" %>` declaration at the top of the JSP, and (2) the JSTL JAR present in `WEB-INF/lib`. If either is missing, the container either ignores the tags (renders as text) or throws on resolution. Wrong URI is the most common cause — the exact URI string must match the TLD.
-**Prove:** Check the JSP file for `<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>` at the very top. If missing → add it. Check `WEB-INF/lib` for `jstl-*.jar` and `standard-*.jar` (JSTL 1.x) or `jakarta.servlet.jsp.jstl-*.jar` (Jakarta EE 9+). If the JAR is absent → tags will not resolve.
+**Prove:** Three-step check — stop at the first step that identifies the problem:
+1. **Declaration present?** Search every JSP file that shows the broken tags for `<%@ taglib`. If absent → missing declaration, add it.
+2. **URI correct for your stack?** If declaration exists, check the `uri` value against your Jakarta EE version:
+   - Spring Boot 2 / Jakarta EE 8: `uri="http://java.sun.com/jsp/jstl/core"` ← must match exactly
+   - Spring Boot 3 / Jakarta EE 9+: `uri="jakarta.tags.core"` ← old URI will silently fail here
+   Mismatch between URI in declaration and the JAR version in `WEB-INF/lib` = tags silently ignored.
+3. **JAR present?** Check `WEB-INF/lib` for `jstl-*.jar` + `standard-*.jar` (JSTL 1.x) or `jakarta.servlet.jsp.jstl-*.jar` (Jakarta EE 9+). If absent → dependency missing.
 **Fix:**
 ```jsp
 <%-- Top of every JSP that uses JSTL core tags --%>
@@ -132,7 +138,9 @@ Dependency (Maven):
 **Why:** Two fundamentally different mechanisms:
 - `RequestDispatcher.forward(req, resp)` — server-side hand-off. Same request object, same URL in browser, attributes preserved. No new HTTP round trip.
 - `response.sendRedirect(url)` — tells browser to make a new GET request. New request object, URL changes in browser, request attributes lost.
-**Prove:** Check the browser URL bar after the form submission. If URL still shows the POST servlet path → forward. If URL changed to a new path → redirect. For double-submit: press browser back then refresh — if form is resubmitted → forward was used where redirect was needed (POST-Redirect-GET pattern violated).
+**Prove:** Two checks, one for each symptom:
+- **Double-submit test:** After submitting the form, immediately press **F5** (refresh) without navigating away. If the browser shows a "Confirm Form Resubmission" / "Resend POST data?" dialog → the server used `forward()` instead of `redirect()`. A correct PRG implementation never shows this prompt because the final response is a GET.
+- **URL check:** After submission, look at the browser URL bar. If it still shows the servlet's POST URL (e.g., `/submitOrder`) → forward. If it changed to a new URL (e.g., `/order/success`) → redirect. For data loss: add `log.debug("[FORWARD] attr=", request.getAttribute("results"))` at the top of the JSP — if null after a redirect, the attribute was lost.
 **Fix:**
 ```java
 // POST form handler — use redirect to prevent double-submit (PRG pattern)

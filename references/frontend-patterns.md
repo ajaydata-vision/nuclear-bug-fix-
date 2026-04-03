@@ -419,11 +419,19 @@ class MyComponent {
 **Prove:**
 ```javascript
 const results = [];
+// The bug: awaiting forEach itself is a no-op — forEach returns undefined,
+// and `await undefined` completes instantly without waiting for any callbacks.
 await [1, 2, 3].forEach(async (id) => {
-  const data = await fetchById(id); // awaited inside, but forEach doesn't await this
+  const data = await fetchById(id); // this await is inside the callback, not the outer scope
   results.push(data);
 });
-console.log(results.length); // 0 — loop already "finished", fetches still in flight
+// Execution reaches here IMMEDIATELY — forEach launched all 3 fetches and returned undefined
+console.log(results.length); // 0 — all fetches still in flight
+
+// Confirm: log before and after forEach
+console.log('[FOREACH] before forEach');
+await arr.forEach(async item => { await doWork(item); });
+console.log('[FOREACH] after forEach — if this prints before work completes → confirmed');
 ```
 **Fix:**
 ```javascript
@@ -524,8 +532,12 @@ window.addEventListener('unhandledrejection', event => {
 // In the module that sees undefined, add:
 console.log('[CIRCULAR] imported value at module init:', importedValue);
 // If undefined here but defined later → circular dependency confirmed
-// Also: run bundler with circular dependency detection:
-// Vite: rollup-plugin-visualizer shows circular deps
+
+// Detect the cycle structurally — use madge (works for both ESM and CJS):
+// npx madge --circular src/
+// Output: Circular dependency found: moduleA.js → moduleB.js → moduleA.js
+
+// Vite: vite-plugin-circular-dependency (NOT rollup-plugin-visualizer — that shows bundle size, not cycles)
 // Webpack: circular-dependency-plugin
 ```
 **Fix:** Break the cycle. Extract the shared value to a third module that neither A nor B imports from each other. Or restructure so one direction of the import is deferred (inside a function, not at top level).
@@ -560,17 +572,25 @@ Rule: treat every `as` and `!` as a potential runtime crash site. Add a comment 
 **Prove:** Open Network tab during the error. Find the failing request — it will be a `.js` chunk with a hash in the name. Compare the hash in the URL to what exists on the server. If the file doesn't exist → stale chunk reference from old HTML.
 **Fix:**
 ```javascript
-// Catch chunk load failures and force a page reload:
+// Catch chunk load failures and force ONE reload — guarded against infinite loops:
 router.onError((error) => {
-  if (error.message.includes('Failed to fetch dynamically imported module') ||
-      error.message.includes('Importing a module script failed')) {
-    window.location.reload(); // reloads fresh HTML with new chunk references
-  }
-});
+  const isChunkError =
+    error.message.includes('Failed to fetch dynamically imported module') ||
+    error.message.includes('Importing a module script failed');
+  if (!isChunkError) return;
 
-// Vite-specific:
-import { defineConfig } from 'vite';
-// Add to vite.config.js — version the manifest:
-export default defineConfig({ build: { manifest: true } });
-// Server: serve new HTML immediately on deploy, keep old chunks for 1-2 hours for in-flight users
+  // Guard: only reload once per session — avoids infinite loop if CDN is down
+  const reloaded = sessionStorage.getItem('chunk_reload_attempted');
+  if (reloaded) {
+    console.error('[CHUNK] Reload did not fix chunk error — CDN may be down');
+    return; // show error UI instead of looping
+  }
+  sessionStorage.setItem('chunk_reload_attempted', '1');
+  window.location.reload(); // reloads fresh HTML with new chunk references
+});
+// Clear the guard on successful navigation:
+router.afterEach(() => sessionStorage.removeItem('chunk_reload_attempted'));
+
+// Server strategy: serve new HTML immediately on deploy,
+// keep old chunk files on CDN for 1-2 hours to serve users still on old HTML
 ```
