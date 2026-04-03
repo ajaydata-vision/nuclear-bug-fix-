@@ -1,22 +1,22 @@
 suite:
   name: nuclear-bug-fix-benchmarks
   version: 1
-  current_case_count: 145
+  current_case_count: 161
   purpose: Measure first-shot bug-fix accuracy, false-positive rate, and verification quality.
 
 tracks:
   - id: bohrbug-core
     description: Deterministic, reproducible, one-primary-cause bugs.
-    current_cases: 59
+    current_cases: 70
   - id: regression-version
     description: Dependency, browser, runtime, or documented behavior change regressions.
-    current_cases: 7
+    current_cases: 8
   - id: deploy-env
     description: Wrong code running, stale assets, env drift, config mismatch, partial rollout.
-    current_cases: 37
+    current_cases: 38
   - id: intermittent-race
     description: Timing, concurrency, startup, flaky test, and load-amplified failures.
-    current_cases: 31
+    current_cases: 32
   - id: distributed-multi-factor
     description: Queues, webhooks, gateways, sagas, replica lag, and multi-service interactions.
     current_cases: 9
@@ -26,13 +26,13 @@ tracks:
 
 domains:
   - id: frontend
-    current_cases: 29
+    current_cases: 32
   - id: backend
     current_cases: 31
   - id: integration
     current_cases: 20
   - id: mobile
-    current_cases: 2
+    current_cases: 7
   - id: general
     current_cases: 11
   - id: version-external-intelligence
@@ -47,8 +47,14 @@ domains:
     description: PyInstaller onefile/onedir runtime shape, _MEIPASS resource lookup, hidden imports, Qt plugins, writable state paths, bundled subprocesses.
     current_cases: 6
   - id: java-enterprise
-    description: Servlet lifecycle, JSP scope/include, NIO ByteBuffer/Channel/Selector, Java threading, JVM/ClassLoader, JDBC, Spring Boot (Transactional, Hibernate, bean scope, Security).
-    current_cases: 27
+    description: Servlet lifecycle, JSP scope/include/EL/JSTL/taglib, NIO ByteBuffer/Channel/Selector, Java threading, JVM/ClassLoader, JDBC, Spring Boot (Transactional, Async, Scheduling, Cache, Hibernate, bean scope, Security), Kafka consumer patterns.
+    current_cases: 30
+  - id: react-native
+    description: Metro bundler cache, React Navigation, FlatList performance, Reanimated worklets, AsyncStorage null, iOS permissions, EAS build.
+    current_cases: 5
+  - id: kafka
+    description: Consumer offset/auto-reset, rebalance storms, poison pill deserialization blocking.
+    current_cases: 3
 
 scoring:
   first_shot_resolution: 40
@@ -96,28 +102,11 @@ authoring_rules:
   - Prefer symptom text, logs, partial code, and raw artifacts over answer-revealing prompts.
   - Put packaged/runtime evidence in assets/ when the real signal is a startup log, stdout capture, or extracted file tree.
   - Mark one_shot_eligible false when clean-machine or runtime proof is still required after diagnosis.
-
-starter_backlog_ids:
-  - FE-001
-  - FE-008
-  - FE-019
-  - BE-003
-  - BE-009
-  - BE-020
-  - IN-002
-  - IN-009
-  - IN-017
-  - MO-001
-  - MO-005
-  - RC-001
-  - RC-002
-  - RC-008
-  - RC-018
-  - VE-003
-  - VE-006
-  - DE-001
-  - DE-002
-  - DE-006
-
-
+  - All code paths and import statements in prompt.md must be factually correct.
+  - Code comments must point to exact crash location, not nearby lines.
+  - requires_log_access must be true when any observability/profiler/monitoring data is used as evidence.
+  - determinism must match the prompt description (intermittent if prompt says "sometimes").
+  - Root cause must be precisely scoped — do not attribute bug to code that is not the crash cause.
+  - partial_credit_conditions must test incomplete-correct answers, not wrong ones.
+  - verify.md must use the same variable names and types as prompt.md code.
 
