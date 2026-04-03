@@ -102,3 +102,29 @@ Do not let one stack dominate the suite. Keep at least:
 - PyInstaller
 - Baileys / WhatsApp bridge adapters
 - Python desktop local-agent runtimes
+
+## React Native Domain (Added v1.11)
+
+| Domain | Benchmark Families | Target Cases |
+|---|---|---|
+| React Native | Metro bundler cache, React Navigation, FlatList/SectionList performance, Reanimated worklets, Expo/EAS build, AsyncStorage, iOS permissions/Info.plist, native module release null, New Architecture/JSI | 20 |
+
+### Stack Families Added
+
+- React Native (0.70+)
+- Expo SDK (managed + bare + EAS)
+- React Navigation (v6)
+- Reanimated (v2/v3)
+- AsyncStorage (@react-native-async-storage)
+
+## Kafka / Messaging Domain (Added v1.11)
+
+| Domain | Benchmark Families | Target Cases |
+|---|---|---|
+| Kafka | Consumer offset/auto-reset, rebalance storms (max.poll.interval.ms), poison pill deserialization blocking, transactional producers | 12 |
+
+### Stack Families Added
+
+- Apache Kafka (3.x)
+- Spring Kafka (3.x)
+- @KafkaListener / ErrorHandlingDeserializer / DLQ patterns

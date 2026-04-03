@@ -2,7 +2,91 @@
 
 ## [Unreleased]
 
+## [1.12] - 2026-04-04
+
+### Adversarial Review — 9 Benchmark Defects Fixed
+
+Post-v1.11 adversarial review of all 16 new benchmark cases identified 9 defects across 8 cases.
+
+- KF-001 verify.md: `--reset-offsets` requires consumer group inactive. Added explicit "stop consumer first" step.
+- KF-002: `track: intermittent-race` + `determinism: deterministic` contradicted each other. Fixed to `determinism: intermittent`. Root cause math was wrong (47s single message < 5min default timeout). Added explicit `max.poll.interval.ms: 30000` to prompt application.yml.
+- FE-021: Partial credit tested output quality, not diagnosis accuracy. Replaced with genuine incomplete-correct scenario.
+- FE-023 (CRITICAL): Fix code used `router.onError()` and `router.afterEach()` — Vue Router APIs. Stack is React Router 6.22. Replaced with correct React Router 6 `errorElement` + `useRouteError` pattern in both evaluator and verify.md.
+- JV-016: Partial credit rewarded "downgrade the JAR" — also listed as rejected_fix_pattern. Moved to fail_conditions.
+- JV-017: `elapsed` variable undefined in code excerpt. Fixed with `System.currentTimeMillis() - start`.
+- JV-018: Root cause depended on Long/Integer type mismatch never shown. Added UserProfile class with `Integer getId()`. verify.md changed method signature without noting controller update; added controller fix example.
+- JV-019: `doGet` added to `OrderServlet` (`@WebServlet("/orders")`) but redirect went to `/confirmation` — 404 guaranteed. Fixed with separate `ConfirmationServlet @WebServlet("/confirmation")`.
+
+## [1.11] - 2026-04-04
+
+### Benchmark Cases — 16 New Cases Across 4 Zero-Coverage Domains
+
+React Native (RN-001..RN-005): Metro cache corruption, FlatList keyExtractor + unstable renderItem,
+AsyncStorage null on first launch, iOS NSCameraUsageDescription missing, Reanimated worklet runOnJS.
+
+Kafka (KF-001..KF-003): auto.offset.reset=latest on new group, max.poll.interval.ms rebalance storm
+with duplicates, poison pill deserialization partition block.
+
+Frontend new patterns (FE-021..FE-023): fetch() silent 4xx, async forEach no-op returning undefined,
+dynamic chunk 404 after deploy with React Router 6 errorElement fix.
+
+Java new patterns (JV-016..JV-019): JSTL javax→jakarta URI after Spring Boot 3, @Async synchronous
+from missing @EnableAsync, @Cacheable stale data from SpEL key mismatch, JSP double-submit PRG.
+
+Quality controls applied from adversarial review: correct import paths, code comments at exact crash
+location, precise track/determinism/log_access fields, scoped root causes, realistic partial credit,
+all 3 files present. Authoring rules documented in index.yaml.
+
+index.yaml: 145→161 cases. Two new domains (react-native, kafka) added.
+
+### Content Fixes (v1.11 also includes)
+
+6 defects from adversarial review:
+- Circular import Prove: rollup-plugin-visualizer → madge (correct tool)
+- Dynamic chunk reload: added sessionStorage infinite-loop guard
+- Forward/redirect Prove: back-then-refresh → F5 refresh (correct diagnostic)
+- async forEach Prove: added explicit "forEach returns undefined, await is no-op" explanation
+- JSTL Prove: added three-step check including javax vs jakarta.tags.core URI mismatch
+- CHANGELOG: added missing v1.10 entry
+
 ## [1.10] - 2026-04-03
+
+### JSP + JavaScript/Frontend Single-Shot Coverage
+
+**references/java-patterns.md — 3 new JSP patterns (Category 2):**
+- JSTL taglib declaration missing — tags render as literal text (covers javax vs jakarta URI mismatch, JAR presence check, Spring Boot 2 vs 3 URI difference)
+- JSP forward vs redirect wrong choice — double-submit, data loss, POST-Redirect-GET pattern with browser F5 diagnostic
+- JSP EL output unescaped — XSS / broken HTML from user input, `<c:out>` vs bare `${expr}`, `fn:escapeXml`
+
+**references/frontend-patterns.md — 11 new patterns, 3 new categories:**
+- SW/CDN pattern: removed orphaned duplicate Signal content below Prove section
+- Category 13 — Vanilla JS & DOM: addEventListener null element, event delegation e.target/closest, `this` context loss, async forEach no-op (returns undefined)
+- Category 14 — Promise & Async: fetch() no throw on 4xx/5xx, response.json() on 204, Promise.all fail-fast vs allSettled, unhandled promise rejection global handler
+- Category 15 — Modern JS & TypeScript: circular import undefined (with madge detection), TypeScript `as` assertion hides null, dynamic import() chunk 404 with sessionStorage-guarded reload
+
+Coverage: 241 patterns, 0 missing Prove, 100% across all reference files.
+
+## [1.9] - 2026-04-03
+
+### End-to-End Trace — 4 Structural Fixes, Single-Shot Path Complete
+
+Full end-to-end adversarial trace of the single-shot path across 4 real bug scenarios
+revealed 4 remaining structural and content issues.
+
+**SKILL.md — Phase 2A (critical):** Reference file now loaded immediately at Phase 2A, not Phase 3.8.
+CP-1 and CP-2 candidate patterns identified at triage time. Entire Phase 3 is now pattern-informed:
+3.6 searches CP-1's specific error signatures; 3.7 surfaces CP-1's risky assumptions; 3.8 Prove is
+the culmination of a fully-guided Phase 3 — not the first time the pattern is consulted.
+Phase 2A header: removed misleading "in Phase 4" text.
+
+**SKILL.md — Phase 4:** Rewritten as "comprehensive review" — file already in context from Phase 2A,
+re-read to catch anything Prove missed, verify Prove maps to exactly one pattern.
+
+**references/java-patterns.md — @Async Prove:** Two-step discriminator replaces ambiguous single Prove:
+Step 1: grep for @EnableAsync (structural, no code run). Step 2: check call site for same-class invocation.
+Previously produced MEDIUM verdict (two causes, same output). Now produces HIGH for both root causes.
+
+
 
 ### JSP + JavaScript/Frontend Single-Shot Coverage
 
