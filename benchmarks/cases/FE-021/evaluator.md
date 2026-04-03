@@ -36,8 +36,8 @@
   - prescribes response.ok check before body parsing
   - provides corrected code with throw on non-ok response
 - partial_credit_conditions:
-  - identifies the issue but prescribes checking `data.error` in the body instead of `response.ok` (works for this specific API but is not the correct general fix)
-  - correctly diagnoses but does not show updated code
+  - identifies the issue but prescribes checking `data.error` in the body instead of `response.ok` (works for this specific API but is not the correct general fix — body-based checks don't generalise to APIs with different error shapes)
+  - diagnoses fetch() silent 4xx correctly but also incorrectly adds a second catch block as a fix
 - fail_conditions:
   - recommends adding a second catch block
   - suggests the server should return a different status code

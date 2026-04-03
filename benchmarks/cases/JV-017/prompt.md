@@ -28,10 +28,11 @@ public class EmailService {
 
     @Async
     public void sendOrderConfirmation(String to, String orderId) {
+        long start = System.currentTimeMillis();
         log.info("[EMAIL] thread={} sending to {}",
                  Thread.currentThread().getName(), to);
         // ... SMTP send takes 3-4 seconds
-        log.info("[EMAIL] sent successfully ({}ms)", elapsed);
+        log.info("[EMAIL] sent successfully ({}ms)", System.currentTimeMillis() - start);
     }
 }
 

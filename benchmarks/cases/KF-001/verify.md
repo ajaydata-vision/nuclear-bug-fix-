@@ -12,12 +12,16 @@
        consumer:
          auto-offset-reset: earliest
    ```
-2. Reset already-committed offsets (because the group already joined once at latest):
+2. **Stop the consumer service first** — `--reset-offsets` requires the group to have no active members:
    ```bash
+   # Stop the Spring Boot service, then:
    kafka-consumer-groups.sh --bootstrap-server kafka:9092 \
      --group order-processor-v1 \
      --reset-offsets --to-earliest \
      --topic orders --execute
+   # Expected output: orders  0  0  (offset reset to 0)
+   #                  orders  1  0
+   #                  orders  2  0
    ```
 3. Restart consumer service
 4. kafka-consumer-groups.sh: LAG now shows total number of historical messages

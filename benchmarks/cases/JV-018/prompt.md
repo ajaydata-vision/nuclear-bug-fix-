@@ -35,6 +35,17 @@ public class UserService {
         return userRepository.save(user);
     }
 }
+
+// UserProfile.java (JPA entity — note getId() return type)
+@Entity
+public class UserProfile {
+    @Id
+    private Integer id;      // ← Integer, not Long (common in JPA entities)
+    private String displayName;
+
+    public Integer getId() { return id; }
+    // ...
+}
 ```
 - reproduction:
   1. GET /users/42 → MISS log, loads from DB, caches with key `42`

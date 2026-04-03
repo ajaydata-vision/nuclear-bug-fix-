@@ -17,7 +17,7 @@
 
 - root_cause: Content-hashed chunk filenames change on every build. The user's browser holds old HTML (loaded before deploy) that references the old chunk hash `Bq7mKpRx`. After deploy, only the new hash `Cx9nLwTy` exists on the CDN. When the user navigates to Settings, `React.lazy()` triggers a dynamic `import()` of the old URL, which returns 404. `Suspense` catches the module load failure and renders nothing (blank page).
 - why_it_happens: Vite generates content-hashed filenames to enable long-term CDN caching. On deploy, old files are replaced with new ones. Users who loaded the app before deploy have stale HTML in memory referencing old chunk URLs. The next navigation to a lazy route triggers a fetch of an URL that no longer exists. Without a chunk load error handler, the failure is silent — `Suspense` has no fallback for load errors, rendering blank.
-- accepted_fix: Two parts: (1) Add a router-level error handler that detects chunk load failures and reloads the page once (with a sessionStorage guard to prevent infinite reload loops). (2) Retain old chunk files on CDN for 1-2 hours after deploy to allow in-flight users to complete their sessions without 404s.
+- accepted_fix: Two parts: (1) Add a React Router 6 `errorElement` to catch chunk load failures and trigger a guarded reload — using `sessionStorage` to prevent infinite reload loops if CDN is down. (2) Retain old chunk files on CDN for 1-2 hours after deploy to allow in-flight users to complete their sessions without 404s.
 - rejected_fix_patterns:
   - disable content hashing in Vite build (breaks long-term caching)
   - add an ErrorBoundary around Suspense without also triggering a reload (shows error UI but user must manually refresh)

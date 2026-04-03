@@ -17,12 +17,20 @@ public class UserService {
         return userRepository.findById(userId).orElseThrow();
     }
 
-    // Fixed: key = "#user.id" changed to "#userId" — must match @Cacheable exactly
+    // Fixed: accept userId as Long (matching @Cacheable key type) + align key expression
     @CacheEvict(value = "users", key = "#userId")
     public UserProfile updateUser(Long userId, UserProfile user) {
         log.info("[CACHE] evicting user {}", userId);
         return userRepository.save(user);
     }
+}
+```
+Note: this changes the service method signature — update the calling controller:
+```java
+// UserController.java
+@PutMapping("/users/{id}")
+public UserProfile update(@PathVariable Long id, @RequestBody UserProfile user) {
+    return userService.updateUser(id, user);  // pass id explicitly
 }
 ```
 If changing the method signature is not desirable, ensure type consistency:

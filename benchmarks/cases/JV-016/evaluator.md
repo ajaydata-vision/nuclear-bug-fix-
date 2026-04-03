@@ -36,9 +36,10 @@
   - explains that the container silently ignores unresolvable taglib URIs (no error thrown)
   - prescribes updating URI in all affected JSPs
 - partial_credit_conditions:
-  - correctly identifies taglib URI issue but only fixes the core taglib without mentioning fmt/fn taglibs
-  - identifies the migration as the trigger but prescribes downgrading the JAR
+  - correctly identifies taglib URI issue but only fixes the core taglib without mentioning fmt/fn taglibs need the same update
+  - identifies URI as the issue but cannot name the correct Jakarta URI (guesses at the right general area)
 - fail_conditions:
   - recommends adding a web.xml taglib mapping
   - suggests the JAR is missing from classpath as the fix
+  - prescribes downgrading the JSTL JAR to version 1.2 (a rejected fix — incompatible with Jakarta EE 9)
   - recommends reverting to Spring Boot 2.7

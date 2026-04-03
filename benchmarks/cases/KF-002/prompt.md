@@ -41,6 +41,8 @@ spring:
     consumer:
       group-id: payment-processor
       max-poll-records: 50
+      properties:
+        max.poll.interval.ms: 30000   # 30 seconds — set by ops team for fast rebalance detection
     listener:
       ack-mode: batch
 ```

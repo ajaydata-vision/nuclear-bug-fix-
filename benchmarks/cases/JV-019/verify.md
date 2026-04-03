@@ -7,36 +7,49 @@
 
 ## After Fix
 ```java
-// OrderServlet.java
-@Override
-protected void doPost(HttpServletRequest req, HttpServletResponse resp)
-        throws ServletException, IOException {
+// OrderServlet.java — POST only, redirect to /confirmation
+@WebServlet("/orders")
+public class OrderServlet extends HttpServlet {
 
-    Order order = orderService.createOrder(
-        req.getParameter("productId"),
-        req.getParameter("quantity"),
-        req.getParameter("customerId")
-    );
-    log.info("[ORDER] created order {} for customer {}",
-             order.getId(), order.getCustomerId());
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
 
-    // Store order in session so it survives the redirect (attributes are lost)
-    req.getSession().setAttribute("lastOrder", order);
+        Order order = orderService.createOrder(
+            req.getParameter("productId"),
+            req.getParameter("quantity"),
+            req.getParameter("customerId")
+        );
+        log.info("[ORDER] created order {} for customer {}",
+                 order.getId(), order.getCustomerId());
 
-    // PRG: redirect to GET — browser URL changes, F5 is safe
-    resp.sendRedirect(req.getContextPath() + "/confirmation");
+        // Store order in session so it survives the redirect (attributes are lost)
+        req.getSession().setAttribute("lastOrder", order);
+
+        // PRG: redirect to GET /confirmation — browser URL changes, F5 is safe
+        resp.sendRedirect(req.getContextPath() + "/confirmation");
+    }
 }
 
-// ConfirmationServlet.java (new GET handler) or add doGet to OrderServlet:
-@Override
-protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-        throws ServletException, IOException {
+// ConfirmationServlet.java — NEW servlet mapped to /confirmation
+@WebServlet("/confirmation")
+public class ConfirmationServlet extends HttpServlet {
 
-    Order order = (Order) req.getSession().getAttribute("lastOrder");
-    req.getSession().removeAttribute("lastOrder"); // consume once
-    req.setAttribute("order", order);
-    req.getRequestDispatcher("/WEB-INF/views/confirmation.jsp")
-       .forward(req, resp);
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+
+        Order order = (Order) req.getSession().getAttribute("lastOrder");
+        if (order == null) {
+            // Direct navigation with no session — redirect home
+            resp.sendRedirect(req.getContextPath() + "/");
+            return;
+        }
+        req.getSession().removeAttribute("lastOrder"); // consume once
+        req.setAttribute("order", order);
+        req.getRequestDispatcher("/WEB-INF/views/confirmation.jsp")
+           .forward(req, resp);
+    }
 }
 ```
 1. Submit order → POST creates order → `sendRedirect` → browser makes GET to `/confirmation`
