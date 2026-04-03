@@ -335,18 +335,6 @@ This disambiguation is critical because the fix is completely different.
 ```
 **Geographic test (CDN edge):** If only some users see stale — CDN edge node cache. Other users hit different edge nodes already updated.
 
-→ SERVICE WORKER. Hard refresh bypasses the SW cache.
-→ CDN would still serve stale to the same user after hard refresh if TTL not expired.
-
-**Signal: Bypass the CDN (direct origin URL) also shows stale**
-→ SERVICE WORKER or browser cache. Not CDN.
-
-**Signal: Bypass CDN shows fresh, CDN shows stale**
-→ CDN cache. Not service worker.
-
-**Signal: Only some users affected, others see fresh content immediately**
-→ CDN edge node cache (geographic). Not service worker (which is per-device).
-
 **Service Worker Fix:**
 ```javascript
 // In sw.js: version the cache name so old SW activates new cache on update
@@ -371,3 +359,218 @@ Or: issue a CDN purge/invalidation as part of the deploy pipeline.
 Open DevTools → Application → Service Workers.
 If a service worker is registered and active, check its cache in Cache Storage.
 If old assets appear in Cache Storage after deploy → SW cache is not being invalidated.
+
+---
+
+## CATEGORY 13 — VANILLA JS & DOM
+
+### Pattern: addEventListener not firing — element not in DOM when listener attached
+**Symptom:** Click/submit/input handler never executes. No error. The event fires (visible in DevTools Event Listeners tab) but the callback doesn't run.
+**Why:** Script runs before the DOM element exists. `document.getElementById('btn')` returns `null`. Calling `.addEventListener()` on `null` throws silently in some contexts or is swallowed. Also: listener attached to the wrong element (parent instead of child, shadow DOM boundary).
+**Prove:**
+```javascript
+const btn = document.getElementById('btn');
+console.log('[DOM] btn element:', btn); // null = not in DOM yet
+// If null → script runs before element. Wrap in DOMContentLoaded or move script to bottom.
+```
+**Fix:** Place script at bottom of `<body>`, or wrap in `document.addEventListener('DOMContentLoaded', () => { ... })`, or use `defer` attribute on `<script>`. Never call `.addEventListener()` without checking the element is non-null first.
+
+### Pattern: Event delegation failing — e.target vs e.currentTarget confusion
+**Symptom:** Listener attached to parent to catch events from dynamic children. Sometimes fires, sometimes doesn't. Fires for wrong element. Clicking exact icon/span inside button doesn't trigger.
+**Why:** When a child element is clicked, `e.target` is the innermost clicked element (may be an icon `<svg>` or `<span>` inside the button). `e.currentTarget` is the element the listener is attached to. Comparing `e.target === btn` fails when user clicks a child of `btn`.
+**Prove:**
+```javascript
+parent.addEventListener('click', e => {
+  console.log('[EVENT] target:', e.target.tagName, e.target.className);
+  console.log('[EVENT] currentTarget:', e.currentTarget.tagName);
+  // If target is 'svg' or 'span' inside the button → closest() needed
+});
+```
+**Fix:**
+```javascript
+parent.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action="submit"]'); // walk up to the button
+  if (!btn) return; // click was outside any actionable element
+  handleSubmit(btn.dataset);
+});
+```
+
+### Pattern: `this` context lost in callback — regular function vs arrow function
+**Symptom:** `this.someProperty` is `undefined` inside an event handler or setTimeout callback. Works when called directly, breaks when passed as callback.
+**Why:** Regular functions bind `this` at call time. When passed as a callback, `this` becomes `undefined` (strict mode) or `window` (sloppy mode). Arrow functions capture `this` from the surrounding lexical scope at definition time.
+**Prove:**
+```javascript
+class MyComponent {
+  handleClick() {
+    console.log('[THIS]', this); // undefined if called as plain callback
+  }
+  setup() {
+    btn.addEventListener('click', this.handleClick); // WRONG — this is lost
+    btn.addEventListener('click', () => this.handleClick()); // CORRECT — arrow preserves this
+    btn.addEventListener('click', this.handleClick.bind(this)); // CORRECT — explicit bind
+  }
+}
+```
+**Fix:** Use arrow function wrapper or `.bind(this)` when passing class methods as callbacks. Or define the method as a class field arrow function: `handleClick = () => { ... }`.
+
+### Pattern: async forEach doesn't await — loop completes before operations finish
+**Symptom:** `forEach` loop over array with async operations. Code after the loop runs immediately. Operations appear to complete in wrong order or not at all. No error thrown.
+**Why:** `Array.prototype.forEach` does not await the promise returned by an async callback. It fires all callbacks and returns immediately, regardless of whether the promises are resolved. This is by design — `forEach` was built before async/await.
+**Prove:**
+```javascript
+const results = [];
+await [1, 2, 3].forEach(async (id) => {
+  const data = await fetchById(id); // awaited inside, but forEach doesn't await this
+  results.push(data);
+});
+console.log(results.length); // 0 — loop already "finished", fetches still in flight
+```
+**Fix:**
+```javascript
+// Use for...of to await each iteration sequentially:
+for (const id of ids) {
+  const data = await fetchById(id);
+  results.push(data);
+}
+
+// Or use Promise.all for parallel execution:
+const results = await Promise.all(ids.map(id => fetchById(id)));
+```
+
+---
+
+## CATEGORY 14 — PROMISE & ASYNC PATTERNS
+
+### Pattern: fetch() doesn't throw on 4xx/5xx — error silently swallowed
+**Symptom:** API call returns 400 or 500. JavaScript code continues as if the call succeeded. No error caught. Response body contains error message but it's never read.
+**Why:** `fetch()` only rejects its promise on network failure (DNS, connection refused). HTTP error status codes (4xx, 5xx) resolve the promise successfully — `response.ok` is `false` but no exception is thrown. Code that only has `.catch()` for network errors silently ignores application errors.
+**Prove:**
+```javascript
+const response = await fetch('/api/user');
+console.log('[FETCH] ok:', response.ok);       // false for 4xx/5xx
+console.log('[FETCH] status:', response.status); // 400, 404, 500, etc.
+// If ok=false and no error thrown → missing ok check
+```
+**Fix:**
+```javascript
+const response = await fetch('/api/user');
+if (!response.ok) {
+  const errorBody = await response.text();
+  throw new Error(`HTTP ${response.status}: ${errorBody}`);
+}
+const data = await response.json();
+```
+
+### Pattern: response.json() throws on empty body — 204 No Content crashes
+**Symptom:** API call succeeds (confirmed in Network tab). `response.json()` throws `SyntaxError: Unexpected end of JSON input`. Only for certain endpoints (delete, update) that return 204.
+**Why:** `response.json()` tries to parse the response body as JSON. A 204 No Content response has no body. `JSON.parse("")` throws a SyntaxError.
+**Prove:** In Network tab, find the failing request. Check its response — if `Content-Length: 0` or no body → 204 pattern. `console.log('[FETCH] status:', response.status)` — if 204 → confirmed.
+**Fix:**
+```javascript
+const response = await fetch('/api/item/123', { method: 'DELETE' });
+if (response.status === 204 || response.headers.get('content-length') === '0') {
+  return null; // no body to parse
+}
+const data = await response.json();
+```
+
+### Pattern: Promise.all fails fast — one rejection silently drops all others
+**Symptom:** Loading several resources in parallel. One fails. Others also fail to load even though they succeeded. Or: one optional resource failing crashes the entire page.
+**Why:** `Promise.all()` rejects immediately when ANY promise rejects, cancelling the wait for the others. Results from succeeded promises are discarded. If the operations are independent, this is almost always wrong.
+**Prove:**
+```javascript
+const results = await Promise.all([fetchA(), fetchB(), fetchC()]);
+// If fetchB() rejects, results from fetchA and fetchC are lost
+// Add .catch() to each to see which one is actually failing:
+const [a, b, c] = await Promise.all([
+  fetchA().catch(e => ({ error: e })),
+  fetchB().catch(e => ({ error: e })),
+  fetchC().catch(e => ({ error: e })),
+]);
+console.log('[PARALLEL] results:', { a, b, c });
+```
+**Fix:**
+```javascript
+// For independent operations where partial success is acceptable:
+const results = await Promise.allSettled([fetchA(), fetchB(), fetchC()]);
+const succeeded = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+const failed = results.filter(r => r.status === 'rejected');
+if (failed.length) console.error('[PARALLEL] some failed:', failed.map(f => f.reason));
+```
+
+### Pattern: Unhandled promise rejection — silent failure in production
+**Symptom:** Feature stops working with no error visible to user. No console error in development. In production, error monitoring shows `UnhandledPromiseRejectionWarning` or `unhandledrejection` events.
+**Why:** An async function throws or a `.then()` chain rejects without a `.catch()`. In development, browsers show a warning. In production, it silently fails. Node.js (older versions) exits the process. In modern browsers, the `unhandledrejection` event fires but code continues.
+**Prove:**
+```javascript
+// Add globally to catch all unhandled rejections in development:
+window.addEventListener('unhandledrejection', event => {
+  console.error('[PROMISE] unhandled rejection:', event.reason);
+  console.trace();
+});
+// This surfaces the exact promise and stack that was missing a .catch()
+```
+**Fix:** Every async function call must have either `await` inside a `try/catch`, or a `.catch()` at the end of the chain. For fire-and-forget operations that must not crash: `asyncFn().catch(err => logger.error(err))`.
+
+---
+
+## CATEGORY 15 — MODERN JS & TYPESCRIPT
+
+### Pattern: Circular import — module sees `undefined` at import time
+**Symptom:** Module A imports from Module B. Module B imports from Module A. One of the imported values is `undefined` at runtime even though it's clearly exported. No error at build time.
+**Why:** ES module resolution handles circular imports by providing the binding, but if Module A has not finished executing when Module B first accesses its export, the value is `undefined` (it's a live binding that will be populated later, but by then the code that needed it has already run with `undefined`).
+**Prove:**
+```javascript
+// In the module that sees undefined, add:
+console.log('[CIRCULAR] imported value at module init:', importedValue);
+// If undefined here but defined later → circular dependency confirmed
+// Also: run bundler with circular dependency detection:
+// Vite: rollup-plugin-visualizer shows circular deps
+// Webpack: circular-dependency-plugin
+```
+**Fix:** Break the cycle. Extract the shared value to a third module that neither A nor B imports from each other. Or restructure so one direction of the import is deferred (inside a function, not at top level).
+
+### Pattern: TypeScript `as` type assertion hides null at runtime
+**Symptom:** TypeScript compiles with no errors. Runtime crash: `Cannot read properties of undefined (reading 'name')`. The variable was typed as non-nullable but is actually null/undefined.
+**Why:** `value as MyType` is a compile-time cast — it does NOT perform any runtime check or transformation. If `value` is actually `null` or `undefined`, the assertion makes TypeScript trust you that it isn't. The runtime doesn't care about TypeScript types.
+**Prove:**
+```typescript
+const user = getUser() as User; // TypeScript satisfied
+console.log('[TYPE] actual value:', user, typeof user); // may log undefined
+user.name; // crashes if user is actually undefined
+```
+**Fix:**
+```typescript
+// Option 1 — runtime guard:
+const user = getUser();
+if (!user) throw new Error('getUser() returned null unexpectedly');
+user.name; // TypeScript now knows it's non-null here
+
+// Option 2 — optional chaining for nullable access:
+const name = getUser()?.name ?? 'Unknown';
+
+// Option 3 — use non-null assertion only when you are CERTAIN:
+const user = getUser()!; // only if getUser() is guaranteed non-null in this code path
+```
+Rule: treat every `as` and `!` as a potential runtime crash site. Add a comment explaining WHY the assertion is safe.
+
+### Pattern: Dynamic import() chunk missing after deploy — 404 on lazy-loaded route
+**Symptom:** App works. New version deployed. Some users (those with the app already open) get a blank page or error when navigating to a specific route. Error: `Failed to load resource: net::ERR_ABORTED 404`. Refreshing the page fixes it.
+**Why:** Code-split bundles use content-hashed filenames (`chunk.abc123.js`). When a new version deploys, old chunk names are gone. Users with the old HTML in memory try to `import()` the old chunk URL — 404. Only users who loaded the app before the deploy are affected.
+**Prove:** Open Network tab during the error. Find the failing request — it will be a `.js` chunk with a hash in the name. Compare the hash in the URL to what exists on the server. If the file doesn't exist → stale chunk reference from old HTML.
+**Fix:**
+```javascript
+// Catch chunk load failures and force a page reload:
+router.onError((error) => {
+  if (error.message.includes('Failed to fetch dynamically imported module') ||
+      error.message.includes('Importing a module script failed')) {
+    window.location.reload(); // reloads fresh HTML with new chunk references
+  }
+});
+
+// Vite-specific:
+import { defineConfig } from 'vite';
+// Add to vite.config.js — version the manifest:
+export default defineConfig({ build: { manifest: true } });
+// Server: serve new HTML immediately on deploy, keep old chunks for 1-2 hours for in-flight users
+```
