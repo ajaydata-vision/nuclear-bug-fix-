@@ -635,8 +635,19 @@ SYSTEM ASSUMPTIONS
 
 ### 3.8 — FORENSIC LOGGING
 
+**TARGETED PROVE FIRST — run this before any broad logging:**
+If Phase 2A identified a specific named pattern AND the Phase 4 reference file is loaded:
+1. Find that pattern's **Prove** section in the reference file.
+2. That single log is your ONLY forensic ask — deliver it now.
+3. Output matches the Prove section's exact described signature → that IS your DDx Gate
+   fast-path evidence. Go directly to 3.9 fast-path. Do not add more logs.
+4. Output is inconclusive or doesn't match → broaden to the full assumption list in 3.7.
+
+Do NOT run the broad assumption-logging campaign when you have a pattern match.
+One targeted prove beats ten scattered logs. A 20-year architect adds one log, not fifteen.
+
 Write debug logging code adapted to the user's actual stack.
-Place a log at **every unchecked assumption** from 3.7.
+Place a log at **every unchecked assumption** from 3.7 only when no pattern match exists.
 Make the bug prove itself. Never guess.
 
 **Core logging principle:** Log type + value + identity, not just value.
@@ -768,6 +779,13 @@ Fast-path requires ALL of the following:
 □ The fix is precise and affects only the proven failure point
 □ A reasonable engineer reading the log would have no alternative explanation
 ```
+
+A reference file's pattern **Prove** log showing the exact signature described for that
+pattern satisfies conditions 1 and 4: it shows the exact mechanism, and it was written
+to produce output that is structurally inconsistent with all alternatives in that domain.
+If you ran the pattern's Prove log and it matches → fast-path eligible. State it as:
+"Pattern proof: [pattern name] Prove log shows [exact output]. This is the described
+signature. No alternative pattern in [domain] produces this output."
 
 If ALL four are true → issue the verdict with HIGH confidence. State the proof
 explicitly in the verdict as: "Direct proof: [log line / result that proves it]"
