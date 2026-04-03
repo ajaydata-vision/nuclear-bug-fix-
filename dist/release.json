@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.5",
-  "source_commit": "5af07715a5de88d6ab2aa4290e708be89b2817cd",
-  "source_commit_short": "5af0771",
-  "source_date": "2026-03-31",
-  "source_subject": "chore: shorten updater smoke test paths",
+  "version": "1.13",
+  "source_commit": "075cee33510a9db915f0c7e7607b4b99d16befda",
+  "source_commit_short": "075cee3",
+  "source_date": "2026-04-03",
+  "source_subject": "v1.13: iteration-4 self-eval 94.2/100 + CHANGELOG complete + coverage matrix",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
