@@ -268,6 +268,11 @@ useMutation({
 
 ## CATEGORY 11 — MOBILE (React Native / iOS / Android)
 
+> **React Native bugs: load `references/react-native-patterns.md` instead.**
+> That file has 26 dedicated patterns across Metro, React Navigation, FlatList,
+> Reanimated, Expo/EAS, AsyncStorage, native modules, permissions, and architecture.
+> The patterns below are retained only for **non-React-Native** native iOS/Android apps.
+
 ### Pattern: React Native bridge error / native module crash
 **Symptom:** App crashes or freezes. "NativeModule is null". Bridge exception in logs.
 **Why:** Native module not linked. Platform mismatch. Old RN architecture (Bridge) vs New (JSI). Missing permission.
@@ -312,7 +317,24 @@ useMutation({
 
 This disambiguation is critical because the fix is completely different.
 
-**Signal: Hard refresh (Ctrl+Shift+R) fixes it for that user**
+**Prove:** Run these two checks in sequence — the combination gives a definitive answer:
+```
+1. Hard refresh (Ctrl+Shift+R) on the affected page.
+   FIXED → Service Worker. Hard refresh bypasses SW cache; CDN is unaffected by it.
+   STILL STALE → Not SW alone. Continue to step 2.
+
+2. Open DevTools → Application → Service Workers.
+   SW registered and active? → Open Cache Storage → find your cache → inspect asset URLs.
+   Asset present with old content hash → SW is serving stale. Fix: update CACHE_VERSION.
+   No SW registered → pure CDN or browser cache issue.
+
+3. Fetch the asset directly from the origin URL (bypass CDN):
+   curl -I https://origin.yourdomain.com/app.abc123.js
+   Fresh response → CDN is caching stale. Fix: purge CDN or use content-hashed filenames.
+   Stale response → Origin itself serving old file. Fix: deployment did not complete.
+```
+**Geographic test (CDN edge):** If only some users see stale — CDN edge node cache. Other users hit different edge nodes already updated.
+
 → SERVICE WORKER. Hard refresh bypasses the SW cache.
 → CDN would still serve stale to the same user after hard refresh if TTL not expired.
 

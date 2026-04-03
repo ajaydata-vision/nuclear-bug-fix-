@@ -211,7 +211,7 @@ Identify the domain FIRST — determines which reference file to load in Phase 4
 | **Python Desktop/UI** | PyQt6 widget update wrong, qasync slot never resumes, UI freezes during network/file/email action, QObject thread affinity error, app hangs on exit, desktop websocket/scheduler interaction broken | `references/python-desktop-patterns.md` |
 | **Bridge / Adapter / Unofficial Client** | Python process talks to Node subprocess, stdout/stderr framed protocol, WhatsApp/Baileys bridge, websocket relay, scraper suddenly returns empty data, connected but no events, first event missing, duplicate event after reconnect | `references/bridge-adapter-patterns.md` |
 | **Frozen / Packaged Runtime** | Works from source, fails in `.exe`; PyInstaller onefile/onedir bug; bundled data missing; hidden import missing; child process or asset not found; writable path differs from dev | `references/windows-packaging-patterns.md` |
-| **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect | `references/java-patterns.md` |
+| **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect, @Async method running synchronously, @Scheduled never fires, Spring cache returning stale data, Kafka consumer not receiving messages, consumer rebalance storm, virtual thread throughput not improving, javax.* ClassNotFoundException after Spring Boot 3 upgrade | `references/java-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
@@ -637,18 +637,20 @@ SYSTEM ASSUMPTIONS
 ### 3.8 — FORENSIC LOGGING
 
 **TARGETED PROVE FIRST — run this before any broad logging:**
-If Phase 2A identified a specific named pattern AND the Phase 4 reference file is loaded:
-1. Find that pattern's **Prove** section in the reference file.
-2. That single log is your ONLY forensic ask — deliver it now.
-3. Output matches the Prove section's exact described signature → that IS your DDx Gate
-   fast-path evidence. Go directly to 3.9 fast-path. Do not add more logs.
-4. Output is inconclusive or doesn't match → broaden to the full assumption list in 3.7.
+If Phase 2A identified a domain with a dedicated reference file:
+1. Load that reference file NOW (do not wait for Phase 4).
+2. Find the pattern whose **Symptom** most closely matches the intake description.
+3. Go directly to that pattern's **Prove** section.
+4. Deliver that Prove as your first and primary forensic ask.
+5. Output matches the Prove's described signature → strong evidence for that pattern.
+   Proceed to 3.9. Do not add more logs unless the gate requires it.
+6. Output is inconclusive or doesn't match → broaden to the full assumption list in 3.7.
 
-Do NOT run the broad assumption-logging campaign when you have a pattern match.
+Do NOT run the broad assumption-logging campaign when a reference pattern matches.
 One targeted prove beats ten scattered logs. A 20-year architect adds one log, not fifteen.
 
 Write debug logging code adapted to the user's actual stack.
-Place a log at **every unchecked assumption** from 3.7 only when no pattern match exists.
+Place a log at **every unchecked assumption** from 3.7 only when no reference pattern matches.
 Make the bug prove itself. Never guess.
 
 **Core logging principle:** Log type + value + identity, not just value.
@@ -782,11 +784,13 @@ Fast-path requires ALL of the following:
 ```
 
 A reference file's pattern **Prove** log showing the exact signature described for that
-pattern satisfies conditions 1 and 4: it shows the exact mechanism, and it was written
-to produce output that is structurally inconsistent with all alternatives in that domain.
-If you ran the pattern's Prove log and it matches → fast-path eligible. State it as:
-"Pattern proof: [pattern name] Prove log shows [exact output]. This is the described
-signature. No alternative pattern in [domain] produces this output."
+pattern is strong targeted evidence: it was designed to surface the specific mechanism
+of that pattern and to narrow the field significantly. If the Prove output matches the
+described signature, it satisfies conditions 1 and 4 for well-discriminating patterns.
+Apply the full sensitivity check (condition 2 and 3) before issuing HIGH confidence —
+some Prove outputs narrow to one pattern; others narrow to two or three. State it as:
+"Pattern proof: [pattern name] Prove log shows [exact output]. This matches the described
+signature. Remaining alternatives eliminated / still possible: [state honestly]."
 
 If ALL four are true → issue the verdict with HIGH confidence. State the proof
 explicitly in the verdict as: "Direct proof: [log line / result that proves it]"

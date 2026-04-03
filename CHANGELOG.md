@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [1.8] - 2026-04-03
+
+### Adversarial Review — 12 Defects Fixed
+
+Post-v1.7 adversarial self-review identified 12 defects. All fixed.
+
+**SKILL.md (structural fixes):**
+- Defect 1 (CRITICAL): Phase 3.8 Targeted Prove First had a sequencing contradiction — referenced "Phase 4 reference file is loaded" before Phase 4 had run, and required "Phase 2A identified a specific named pattern" which Phase 2A never does (it identifies a domain, not a pattern). Rewritten to be self-contained: load the reference file NOW at step 3.8, find the matching pattern by Symptom, use its Prove section directly.
+- Defect 2 (HIGH): Phase 3.9 fast-path addition claimed Prove logs are "structurally inconsistent with all alternatives in that domain" — an unverifiable assertion that would manufacture false HIGH confidence. Replaced with honest language: Prove logs "narrow the field significantly" and require the full sensitivity check before HIGH confidence.
+- Defect 4 (MEDIUM): Java Enterprise row in Phase 2A missing Kafka, @Async, @Scheduled, virtual thread, and Spring Boot 3 signals. Engineers describing Kafka consumer or async bugs were not routed to java-patterns.md. All signals added.
+
+**references/java-patterns.md:**
+- Defect 5 (MEDIUM): @Async void exception Prove was the fix itself (add try/catch). Replaced with structural inspection Prove: check for @EnableAsync presence and AsyncUncaughtExceptionHandler at startup.
+- Defect 6 (MEDIUM): @Scheduled Prove referenced `schedulingTaskRegistrar` — an unresolved variable that would not compile. Replaced with simple, correct Prove: log first line of scheduled method.
+- Defect 7 (MEDIUM): Kafka session.timeout.ms default stated as 10s — wrong since Kafka 3.0 (changed to 45s). Fixed to 45s with version note.
+- Defect 8 (MEDIUM): Kafka transactional Prove recommended setting isolation.level=read_uncommitted on consumer without safety warning. Added explicit: non-production diagnostic consumer only, never on production.
+- Defect 9 (LOW-MED): ScopedValue stated as "finalized in Java 23" — wrong. Finalized in Java 22 (JEP 464). Fixed.
+
+**references/react-native-patterns.md:**
+- Defect 10 (MEDIUM): Duplicate module Prove used `node -e require.resolve` which doesn't work as described in monorepos. Replaced with `yarn why` / `npm ls` plus runtime `require.resolve` inside both components.
+- Defect 11 (MEDIUM): iOS permission Prove claimed `'denied'` status = Info.plist missing — wrong. `'denied'` has four other causes. Replaced with Xcode console message as pathognomonic smoking gun, plus direct Info.plist inspection as fallback.
+- Defect 12 (LOW): New Architecture Prove used `gradlew dependencies | grep turbo|jsi` — unreliable noise. Replaced with: error message itself as smoking gun + `codegenConfig` key presence in package.json as compatibility signal.
+
+**references/frontend-patterns.md:**
+- Defect 3 (HIGH): React Native patterns existed in two places (Category 11 + react-native-patterns.md) with no redirect. Added explicit redirect notice to Category 11 pointing to react-native-patterns.md for all React Native bugs.
+- Pre-existing: SW vs CDN pattern had no Prove section. Added a 3-step sequential Prove (hard refresh test → DevTools Service Worker check → origin curl bypass test).
+
+**references/integration-patterns.md:**
+- Pre-existing: "Deployment succeeds but old version running" had no Prove. Added: version endpoint check + container image digest comparison.
+
+**Prove coverage:** 227 total patterns across all reference files — 100% Prove coverage (was 2 missing pre-existing gaps, now zero).
+
 ## [1.7] - 2026-04-03
 
 ### Java & React Native — Single-Shot Coverage Completion

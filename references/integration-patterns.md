@@ -152,6 +152,7 @@ Each pattern: symptom → why → how to prove → how to fix.
 ### Pattern: Deployment succeeds but old version still running
 **Symptom:** Deploy pipeline completes. New features not visible. Logs show old version.
 **Why:** Blue-green: traffic not switched. Container image cached — pulling old image. Multiple instances — only some updated. CDN caching old assets. Service not restarted.
+**Prove:** Hit a `/health` or `/version` endpoint that returns the deployed commit SHA or version string. If it returns the old value after deploy → old code is running. No such endpoint? Add `log.info("App version: {}", System.getenv("GIT_SHA"))` at startup — compare against the commit deployed. For containers: `docker inspect <container> | grep Image` — confirm image digest matches the newly built image.
 **Fix:** Add version endpoint to app. After deploy, verify version endpoint returns new version. Force image pull in deploy config. Invalidate CDN cache. Verify all instances updated.
 
 ### Pattern: Environment variables missing in deployed environment

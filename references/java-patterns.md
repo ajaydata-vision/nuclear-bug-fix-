@@ -587,7 +587,7 @@ Also applies to self-invocation: calling an `@Async` method from within the same
 ### Pattern: @Async exception silently swallowed — AsyncUncaughtExceptionHandler not set
 **Symptom:** `@Async` void method throws an exception. Nothing happens. No log, no alert, no retry. Business operation silently not performed.
 **Why:** For `@Async` methods returning `void`, exceptions cannot propagate to the caller (there is no return channel). Spring discards them unless an `AsyncUncaughtExceptionHandler` is configured.
-**Prove:** Add a try/catch inside the async method that logs any exception. If exceptions appear that were previously invisible → `AsyncUncaughtExceptionHandler` is missing.
+**Prove:** Inspect the configuration class — is `@EnableAsync` present on any `@Configuration` class? If absent, the hypothesis is confirmed structurally: Spring cannot discard what it never registered. For runtime confirmation: add `log.debug("[ASYNC] handler registered: {}", exceptionHandler != null)` in a `@Configuration implements AsyncConfigurer` — if the handler is null at startup, it was never configured.
 **Fix:**
 ```java
 @Configuration
@@ -604,7 +604,7 @@ public class AsyncConfig implements AsyncConfigurer {
 ### Pattern: @Scheduled method not executing — @EnableScheduling missing
 **Symptom:** Method annotated `@Scheduled(fixedRate=...)` or `@Scheduled(cron=...)` never runs. No error. Silence.
 **Why:** Same root cause as `@Async`: without `@EnableScheduling`, the annotation is recognized but no scheduler is started. The task is registered nowhere.
-**Prove:** Add `@EventListener(ApplicationReadyEvent.class) public void check() { log.info("Scheduler active: {}", schedulingTaskRegistrar != null); }`. More directly: if no log from the `@Scheduled` method ever appears, add `log.info("[SCHED] tick at {}", Instant.now())` as the first line. If it never prints → scheduler not started.
+**Prove:** Add `log.info("[SCHED] tick at {}", Instant.now())` as the absolute first line of the `@Scheduled` method. If this never appears in logs after the application is fully started → scheduler is not running. Cross-check: search the entire codebase for `@EnableScheduling` — if absent, confirmed. If present, check it is on a class that Spring actually loads (reachable via component scan or explicit `@Import`).
 **Fix:** Add `@EnableScheduling` to any `@Configuration` class. For Spring Boot apps, adding it to the main `@SpringBootApplication` class is sufficient.
 
 ### Pattern: @Cacheable returns stale data — cache not invalidated after write
@@ -675,7 +675,7 @@ kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 
 ### Pattern: Kafka consumer group rebalance storm — listener processing slower than session timeout
 **Symptom:** Consumer processes some messages then stops. Logs show repeated `Revoked partitions` / `Assigned partitions` cycles. Messages processed multiple times (duplicate processing). Lag grows despite consumer running.
-**Why:** Kafka's consumer coordinator requires a heartbeat within `session.timeout.ms` (default 10s). If message processing takes longer than this, the coordinator declares the consumer dead, triggers rebalance, reassigns partitions, and another consumer picks up from last committed offset. That consumer also times out. Loop.
+**Why:** Kafka's consumer coordinator requires a heartbeat within `session.timeout.ms` (default **45 seconds** in Kafka 3.0+, was 10s pre-3.0). If message processing takes longer than this, the coordinator declares the consumer dead, triggers rebalance, reassigns partitions, and another consumer picks up from last committed offset. That consumer also times out. Loop.
 **Prove:** Log the processing time of every message: `long start = System.currentTimeMillis(); process(record); log.debug("[KAFKA] processed in {}ms", System.currentTimeMillis()-start)`. If any message exceeds `session.timeout.ms` → rebalance trigger confirmed. Also check `max.poll.interval.ms` (default 5 minutes) — exceeded when batch too large.
 **Fix:**
 ```yaml
@@ -702,7 +702,7 @@ kafkaTemplate.send(topic, key, value)
 // If "sent offset" never appears → message never reached broker
 // If offset appears but consumer doesn't see it → transaction not committed
 ```
-Also: temporarily set `isolation.level=read_uncommitted` on consumer to see if uncommitted messages are present.
+Also: on a **non-production** diagnostic consumer only, temporarily set `isolation.level=read_uncommitted` to confirm uncommitted messages are present in the topic. Never change isolation on a production consumer — it exposes dirty reads from all producers on the broker.
 **Fix:** Ensure `kafkaTemplate.send()` result is awaited or callback is checked. For transactional producers: annotate the method with `@Transactional` and ensure no exception exits before the method returns normally.
 
 ### Pattern: @KafkaListener deserializaton error — poison pill stops entire partition
@@ -752,7 +752,7 @@ public void listen(ConsumerRecord<String, Object> record) {
 **Symptom:** After migrating to virtual threads, per-request data (MDC fields, user context, tenant ID) occasionally appears in unrelated requests. Symptom identical to the servlet singleton state pollution bug but the fix is different.
 **Why:** Virtual threads are created per-task and should not share ThreadLocals with other tasks. However: if a thread pool is reused (e.g., a bounded virtual thread executor), or if `InheritableThreadLocal` is used, child virtual threads inherit parent's state. Web frameworks that create virtual threads from a thread pool that had prior request state cause cross-contamination.
 **Prove:** Log `MDC.getCopyOfContextMap()` at the START of each request handler BEFORE setting any MDC values. If any prior request's MDC values appear at the start of a new request → ThreadLocal leak confirmed. Log `Thread.currentThread().isVirtual()` to confirm virtual threads are in use.
-**Fix:** Use `ScopedValue` (Java 21 preview, Java 23 final) instead of `ThreadLocal` for request-scoped state. Clear ThreadLocals explicitly in a filter before and after each request. Prefer `ThreadLocal` over `InheritableThreadLocal` to prevent child thread inheritance.
+**Fix:** Use `ScopedValue` (preview in Java 21, finalized in **Java 22** — JEP 464) instead of `ThreadLocal` for request-scoped state. Clear ThreadLocals explicitly in a filter before and after each request. Prefer `ThreadLocal` over `InheritableThreadLocal` to prevent child thread inheritance.
 ```java
 // Correct pattern for virtual thread request context
 static final ScopedValue<RequestContext> REQUEST_CTX = ScopedValue.newInstance();

@@ -21,13 +21,15 @@ Each pattern: symptom → why → prove → fix.
 **Why:** If a library exists in both the root `node_modules` and a sub-package's `node_modules`, Metro bundles both copies. Each copy has its own module singleton. React context, hook state, and module-level singletons are per-copy.
 **Prove:**
 ```bash
-npx react-native info  # shows Metro resolver config
-# Also:
-node -e "const r = require.resolve('react'); console.log(r)"
-# Run from root AND from the suspect sub-package directory
-# Different paths = duplicate module
+# Definitive check — run from project root:
+yarn why react          # shows every reason react is installed and which version
+npm ls react            # npm equivalent — multiple version entries = duplicated
+
+# If duplicated, yarn why output shows two entries with different versions:
+# react@18.2.0 (hoisted from root)
+# react@17.0.2 (in packages/some-sub-package/node_modules)
 ```
-Definitive: `yarn why <package>` or `npm ls <package>` — multiple version lines = duplicated.
+Metro-level confirmation: add `console.log(require.resolve('react'))` inside BOTH the component that works and the one that doesn't. If they print different absolute paths → two copies are loaded at runtime.
 **Fix:** Hoist to root: add to `package.json` resolutions (yarn) or `overrides` (npm). For monorepos: configure Metro `resolver.extraNodeModules` to point sub-packages at the root copy.
 
 ### Pattern: Hermes engine strips console.log in production — debugging data missing
@@ -346,16 +348,16 @@ useEffect(() => {
 ### Pattern: iOS permission request shows no dialog — Info.plist entry missing
 **Symptom:** `PermissionsAndroid` (Android) works. On iOS, calling `Camera.requestCameraPermissionsAsync()` or similar does nothing — no dialog, no error. Feature silently unavailable.
 **Why:** iOS requires every permission the app might request to have a usage description string in `Info.plist`. Without it, iOS silently denies the request — no dialog, no error thrown to JS. App Store review also rejects apps requesting undeclared permissions.
-**Prove:**
-```javascript
-import { Camera } from 'expo-camera';
-const { status } = await Camera.requestCameraPermissionsAsync();
-console.log('[PERM] camera status:', status);
-// 'denied' on first request with no dialog = Info.plist entry missing
-// 'granted' = already approved in a prior session
-// Check native iOS logs in Xcode: "This app has crashed because it attempted to 
-// access privacy-sensitive data without a usage description."
+**Prove:** The smoking gun is in the **Xcode console** (not the JS status value):
 ```
+// Xcode console output when Info.plist entry is missing:
+"This app has crashed because it attempted to access privacy-sensitive data
+without a usage description. The app's Info.plist must contain an
+NSCameraUsageDescription key with a string value..."
+```
+This message is pathognomonic — it only appears when the Info.plist key is absent.
+
+Note: the JS `status` value alone is NOT a reliable Prove. `'denied'` can mean Info.plist missing, but also: user previously denied in Settings, MDM/enterprise restriction, or parental controls. Only the Xcode message distinguishes the Info.plist case. If Xcode is unavailable: check `ios/MyApp/Info.plist` directly — if the `NS*UsageDescription` key for the permission is absent, confirmed.
 **Fix:** Add to `app.json` under `expo.ios.infoPlist` (Expo) or directly to `ios/MyApp/Info.plist` (bare):
 ```json
 {
@@ -427,13 +429,23 @@ console.log('[NATIVE] all modules:', Object.keys(NativeModules).join(', '));
 ### Pattern: New Architecture (JSI) module unavailable — TurboModule not enabled or unsupported
 **Symptom:** After enabling New Architecture (`newArchEnabled=true` in `gradle.properties`), a native module stops working. Throws `TurboModuleRegistry.getEnforcing(...) Module not found`. Works with Old Architecture.
 **Why:** New Architecture uses JSI/TurboModules instead of the Bridge. Libraries must explicitly support TurboModules. Many older libraries have not migrated. Enabling New Architecture without checking library compatibility breaks them.
-**Prove:**
+**Prove:** The error message itself is the smoking gun:
+```
+TurboModuleRegistry.getEnforcing(...): 'ModuleName' Module not found
+```
+This error fires **only** when New Architecture is enabled and the module was not registered as a TurboModule — it cannot appear under Old Architecture. No additional log needed.
+
+To identify WHICH libraries are incompatible before hitting runtime errors:
 ```bash
-# Check which libraries support New Architecture:
-npx react-native info
-# Or check each library's README/CHANGELOG for "New Architecture" / "TurboModule" support
-# List incompatible libraries:
-cd android && ./gradlew :app:dependencies | grep -i "turbo\|jsi"
+# Check React Native's official compatibility list:
+npx react-native-community-releases check  # if available
+
+# Manual: for each native library, check its GitHub repo:
+# Search issues for: "new architecture" OR "turbomodule" OR "JSI"
+# Check package.json for "codegenConfig" key — its presence signals TurboModule support
+grep -r "codegenConfig" node_modules/LIBRARY_NAME/package.json
+# Present = likely supports New Architecture
+# Absent = likely does not
 ```
 **Fix:** For libraries not yet supporting New Architecture: disable New Architecture (`newArchEnabled=false`) until they do, or find a replacement. For your own native modules: implement `TurboModuleSpec` interface and register with `TurboModuleRegistry`. Check the React Native New Architecture migration guide for each module type.
 
