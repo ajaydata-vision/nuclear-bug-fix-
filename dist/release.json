@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.13",
-  "source_commit": "075cee33510a9db915f0c7e7607b4b99d16befda",
-  "source_commit_short": "075cee3",
-  "source_date": "2026-04-03",
-  "source_subject": "v1.13: iteration-4 self-eval 94.2/100 + CHANGELOG complete + coverage matrix",
+  "version": "1.14",
+  "source_commit": "7eb200400835529b6ee7da1c8945f4d27ffcc178",
+  "source_commit_short": "7eb2004",
+  "source_date": "2026-04-04",
+  "source_subject": "v1.13 README: update all stale data + promotion-ready content",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

@@ -259,10 +259,69 @@ useMutation({
 **Fix:** Remove event listeners in cleanup (useEffect return, beforeDestroy). Clear intervals. Close connections on unmount.
 
 ### Pattern: Scroll or animation jank
-**Symptom:** Smooth in dev. Jank/stutter in prod or on low-end device.
-**Why:** Layout thrashing (read then write DOM in loop). Expensive computation on main thread. Non-GPU-accelerated CSS properties being animated.
-**Prove:** Open DevTools Performance tab. Record the jank. Look for long tasks and layout events.
-**Fix:** Use `transform` and `opacity` for animations (GPU-accelerated). Move computation to Web Worker. Batch DOM reads/writes with `requestAnimationFrame`.
+**Symptom:** Smooth in dev. Jank/stutter in prod or on low-end device. Includes content jumping unexpectedly (visual jank caused by layout shifts).
+**Why:** Layout thrashing (read then write DOM in loop). Expensive computation on main thread. Non-GPU-accelerated CSS properties being animated. Or: elements without explicit dimensions causing layout shifts on load (CLS).
+**Prove:**
+- **Motion jank** (stutter, dropped frames): Open DevTools Performance tab. Record the jank. Look for long tasks (red bars) and purple layout events in the flame chart.
+- **Visual jank** (content jumping): Paste in DevTools console to identify exactly which element is shifting and by how much:
+```javascript
+new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (!entry.hadRecentInput) {
+      console.log('[CLS] shift score:', entry.value);
+      entry.sources?.forEach(s => {
+        console.log('  shifted element:', s.node);
+        console.log('  from:', s.previousRect);
+        console.log('  to:', s.currentRect);
+      });
+    }
+  }
+}).observe({ type: 'layout-shift', buffered: true });
+```
+If output shows a specific element shifting → that element is missing explicit dimensions or is being injected above existing content.
+**Fix:** Use `transform` and `opacity` for animations (GPU-accelerated). Move computation to Web Worker. Batch DOM reads/writes with `requestAnimationFrame`. For layout shifts: add explicit `width`/`height` or `aspect-ratio` to images and embeds; never inject content above the viewport fold.
+
+### Pattern: Page interactions sluggish — clicks and taps respond slowly
+**Symptom:** Page loads fine. But clicking buttons, typing, or tapping feels delayed — the UI updates 300–800ms after the action. Lighthouse or CrUX shows INP (Interaction to Next Paint) > 200ms.
+**Why:** INP = Input Delay + Processing Time + Presentation Delay. If the main thread is busy with a long task when the user clicks, the event handler is queued (input delay). If the handler itself does heavy work, that adds processing time. Either causes the interaction to feel unresponsive.
+**Prove:** Paste in DevTools console, then click/tap the elements that feel slow:
+```javascript
+new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.duration > 200) {
+      console.warn('[INP] slow interaction:', {
+        type: entry.name,
+        totalMs: Math.round(entry.duration),
+        inputDelayMs: Math.round(entry.processingStart - entry.startTime),
+        processingMs: Math.round(entry.processingEnd - entry.processingStart),
+        presentationMs: Math.round(entry.duration - (entry.processingEnd - entry.startTime)),
+        target: entry.target
+      });
+    }
+  }
+}).observe({ type: 'event', buffered: true, durationThreshold: 16 });
+```
+Read the output: **high inputDelayMs** → main thread blocked before handler runs (long task blocking). **High processingMs** → event handler itself is doing too much. **High presentationMs** → excessive re-render after handler.
+**Fix:** For high input delay: break up long tasks with `setTimeout(fn, 0)` or `scheduler.yield()`. For high processing: move heavy work out of the click handler into `requestAnimationFrame` or a Web Worker. For high presentation: reduce component re-render scope (React.memo, useMemo).
+
+### Pattern: Page loads slowly — LCP element identified but cause unknown
+**Symptom:** Page feels slow on initial load. Lighthouse shows LCP (Largest Contentful Paint) > 2.5s. The hero image or main heading takes too long to appear. Users see blank space where content should be.
+**Why:** LCP is delayed by one of four causes — each requires a different fix: (1) slow server response (TTFB > 800ms), (2) render-blocking CSS/JS in `<head>` delaying paint, (3) LCP resource discovered late (not preloaded), (4) LCP element rendered client-side after JS runs (not in initial HTML).
+**Prove:** First identify your LCP element and its time. Paste in DevTools console:
+```javascript
+new PerformanceObserver((list) => {
+  const last = list.getEntries().at(-1);
+  console.log('[LCP] element:', last.element);
+  console.log('[LCP] time (ms):', Math.round(last.startTime));
+  console.log('[LCP] url (if resource):', last.url);
+}).observe({ type: 'largest-contentful-paint', buffered: true });
+```
+Then diagnose the cause using the LCP time and Network tab:
+- LCP time ≈ TTFB → slow server. Fix: CDN, caching, edge rendering.
+- LCP time ≈ when CSS finishes loading → render-blocking stylesheet. Fix: inline critical CSS, defer rest.
+- LCP url shows image loaded late (starts well after page load in waterfall) → missing preload. Fix: `<link rel="preload" href="..." as="image" fetchpriority="high">`.
+- LCP element is `null` in script output → element added by JavaScript, not in HTML. Fix: server-side render or static generate the LCP content.
+**Fix:** Match the fix to the cause identified above. Never prescribe a generic "optimize images" without first running this Prove — the four causes require completely different interventions.
 
 ---
 
