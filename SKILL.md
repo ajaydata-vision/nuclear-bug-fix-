@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.14"
-  source_commit: "7eb200400835529b6ee7da1c8945f4d27ffcc178"
+  version: "1.15"
+  source_commit: "9172d29cd1d1b6839171c8d4456761ce39383a9f"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -212,6 +212,7 @@ Identify the domain FIRST — determines which reference file to load.
 | **Bridge / Adapter / Unofficial Client** | Python process talks to Node subprocess, stdout/stderr framed protocol, WhatsApp/Baileys bridge, websocket relay, scraper suddenly returns empty data, connected but no events, first event missing, duplicate event after reconnect | `references/bridge-adapter-patterns.md` |
 | **Frozen / Packaged Runtime** | Works from source, fails in `.exe`; PyInstaller onefile/onedir bug; bundled data missing; hidden import missing; child process or asset not found; writable path differs from dev | `references/windows-packaging-patterns.md` |
 | **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect, @Async method running synchronously, @Scheduled never fires, Spring cache returning stale data, Kafka consumer not receiving messages, consumer rebalance storm, virtual thread throughput not improving, javax.* ClassNotFoundException after Spring Boot 3 upgrade | `references/java-patterns.md` |
+| **PHP** | OPcache stale code after deploy, `==` vs `===` auth bypass, Eloquent N+1, queue job silent fail, `empty()` drops valid form value, PHP-FPM worker exhaustion, headers already sent, `session_start()` missing, composer autoload not regenerated, Laravel service container binding not found, Blade template cached with old output, CSRF 419 on form POST, transaction not committed on exception, persistent PDO connection leaks state, PHP CLI and FPM on different versions, `.env` not loaded in cron context, composer runtime version conflict | `references/php-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 

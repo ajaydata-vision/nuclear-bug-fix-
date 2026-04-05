@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.14",
-  "source_commit": "7eb200400835529b6ee7da1c8945f4d27ffcc178",
-  "source_commit_short": "7eb2004",
-  "source_date": "2026-04-04",
-  "source_subject": "v1.13 README: update all stale data + promotion-ready content",
+  "version": "1.15",
+  "source_commit": "9172d29cd1d1b6839171c8d4456761ce39383a9f",
+  "source_commit_short": "9172d29",
+  "source_date": "2026-04-05",
+  "source_subject": "v1.14: CLS tracker + INP + LCP patterns from adversarial review",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

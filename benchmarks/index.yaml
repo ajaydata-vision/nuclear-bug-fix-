@@ -53,6 +53,9 @@ domains:
     description: Metro bundler cache, React Navigation, FlatList performance, Reanimated worklets, AsyncStorage null, iOS permissions, EAS build.
     current_cases: 5
   - id: kafka
+  - id: php
+    description: PHP execution model (shared-nothing, OPcache, headers), type system (loose comparison traps), Laravel (Eloquent, queues, service container, config cache), PHP-FPM (worker exhaustion, timeouts), PDO, Eloquent ORM, PHP version and environment mismatches.
+    current_cases: 0
     description: Consumer offset/auto-reset, rebalance storms, poison pill deserialization blocking.
     current_cases: 3
 
