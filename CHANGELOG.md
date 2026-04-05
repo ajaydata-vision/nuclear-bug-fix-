@@ -2,7 +2,107 @@
 
 ## [Unreleased]
 
-## [1.12] - 2026-04-04
+## [1.16] - 2026-04-05
+
+### PHP Self-Evaluation 94.6/100 + OPcache Guard Fix
+
+Self-evaluation of php-patterns.md across 18 representative PHP scenarios
+(15 domain cases + 3 adversarial). Mean 94.6/100. All 18 cases score 85+.
+Single-shot HIGH confidence (≥90) rate: 16/18 = 89%.
+
+Domain means: Type System 98.5, Laravel 98.0, Execution Model 96.3,
+Version/Env Mismatch 97.5, Eloquent 97.0, Queues 97.0, Security 100.
+FPM exhaustion (88) and PDO ERRMODE (88) correctly calibrated at MEDIUM.
+
+Adversarial case PHP-A01 identified gap: OPcache `$status === false` guard
+log said "not the cause" which is wrong when run from CLI (opcache.enable_cli=0
+default makes CLI result unreliable). Fixed guard message to instruct developer
+to re-run via web request.
+
+## [1.15] - 2026-04-05
+
+### PHP Reference File — 45 Patterns, 10 Categories
+
+references/php-patterns.md — new file.
+243 → 288 total patterns. 13 → 14 reference files.
+
+**Visibility Prerequisite** (before all categories): display_errors=Off is
+the PHP production default. No errors visible = every Prove fails before it
+starts. Prerequisite provides the exact commands to find the error_log path
+and surface PHP errors safely.
+
+Categories (45 patterns, 0 missing Prove, 100% coverage):
+1. PHP Execution Model (5) — OPcache, shared-nothing, headers already sent,
+   session_start() missing, global state cross-request
+2. Type System & Comparison Traps (5) — == vs ===, empty(), in_array() loose,
+   switch coercion, integer overflow via float
+3. Laravel Framework (8) — Eloquent N+1, queue driver sync, service container
+   binding, middleware not applied, config cache, relationship mismatch,
+   event listener, Blade cache
+4. PHP-FPM & Server (5) — worker exhaustion (ps aux + nginx log Prove,
+   no prior pm.status_path config required), max_execution_time, memory_limit,
+   wrong user permissions, persistent PDO state
+5. OPcache & Autoloading (4) — composer dump-autoload, Cannot redeclare class,
+   namespace/use missing, OPcache memory full
+6. PDO & Database (5) — ERRMODE_SILENT, transaction not committed, N+1
+   (Option A inline counter + Option B function wrap), charset utf8mb4,
+   parameter count mismatch
+7. Eloquent / ORM (5) — mass assignment fillable, soft delete scope bypass,
+   model event observer, withCount mismatch, eager load constraint
+8. Queues Cache & Scheduled (4) — cache driver/key, cron entry missing,
+   job swallows exception, Redis exhaustion
+9. Security functional bugs (1) — CSRF 419 only (audit patterns removed)
+10. Version & Environment Mismatch (3) — CLI/FPM different PHP versions
+    (nginx fastcgi_pass socket = pathognomonic), .env not in CLI/cron context,
+    Composer runtime version conflict
+
+Phase 2A: PHP routing row added to SKILL.md with 17 discriminating signals.
+
+Adversarial review applied before implementation — 8 defects caught and fixed:
+Visibility Prerequisite added, OPcache Prove uses file-level timestamp comparison
+(not just opcache_get_status() enabled check), Cat 9 reduced from 4 to 1 pattern
+(3 were security audit patterns not bugs), Cat 10 consolidated from 4 trivial
+migration patterns to 3 genuinely hard patterns, FPM Prove uses ps aux + nginx log
+(no prior configuration required), == Prove logs at comparison site not generic
+var_dump, PDO N+1 Prove adds Option A (inline counter, works for any loop pattern).
+
+## [1.14] - 2026-04-04
+
+### CLS Tracker + INP Debugger + LCP Pattern — Frontend Performance Proves
+
+references/frontend-patterns.md — Category 10 enhanced, 2 new patterns added.
+241 → 243 patterns.
+
+Adversarial review of "30-line addition to 2 existing patterns" proposal
+identified wrong pattern mapping: LCP observer fires only at initial load,
+not during memory leak sessions; INP observer doesn't capture scroll events.
+
+Corrected implementation:
+- Scroll or animation jank (enhanced): CLS PerformanceObserver added as
+  visual jank sub-case. Identifies exact shifting element + previousRect/currentRect.
+- NEW: Page interactions sluggish — clicks/taps respond slowly (INP > 200ms):
+  PerformanceObserver with inputDelayMs/processingMs/presentationMs breakdown.
+  Each points to a different fix (long task / heavy handler / excessive re-render).
+- NEW: Page loads slowly — LCP element identified but cause unknown:
+  PerformanceObserver identifies element + time + resource URL, then four-cause
+  discrimination (TTFB / render-blocking / late discovery / JS-rendered element).
+
+## [1.13] - 2026-04-04
+
+### Iteration-4 Self-Evaluation 94.2/100 + CHANGELOG Complete + Coverage Matrix
+
+Benchmark (iteration-4-self-eval.md): 25 cases across new domains + regression
+check. Mean 94.2/100 (+1.9 vs iteration-2 full-domain 92.3). All 25 score 83+.
+Single-shot HIGH confidence rate: 96% (24/25).
+
+Key results: React Native 96.2 (5 new cases), Kafka 92.3 (3 new cases),
+Frontend new patterns 94.7 (3 cases), Java new patterns 95.5 (4 cases),
+Previously-70 cases: +17 average improvement. Original domains: 95.7, no regression.
+
+CHANGELOG: added missing v1.9, v1.11, v1.12 entries.
+COVERAGE_MATRIX.md: added React Native and Kafka domain sections.
+
+
 
 ### Adversarial Review — 9 Benchmark Defects Fixed
 
@@ -16,6 +116,27 @@ Post-v1.11 adversarial review of all 16 new benchmark cases identified 9 defects
 - JV-017: `elapsed` variable undefined in code excerpt. Fixed with `System.currentTimeMillis() - start`.
 - JV-018: Root cause depended on Long/Integer type mismatch never shown. Added UserProfile class with `Integer getId()`. verify.md changed method signature without noting controller update; added controller fix example.
 - JV-019: `doGet` added to `OrderServlet` (`@WebServlet("/orders")`) but redirect went to `/confirmation` — 404 guaranteed. Fixed with separate `ConfirmationServlet @WebServlet("/confirmation")`.
+
+## [1.12] - 2026-04-04
+
+### Adversarial Review — 9 Benchmark Defects Fixed Across 8 Cases
+
+Post-v1.11 adversarial review of all 16 new benchmark cases found 9 defects:
+
+- KF-001 verify.md: `--reset-offsets` requires consumer group inactive. Added stop-consumer step.
+- KF-002: `track:intermittent-race` + `determinism:deterministic` contradicted each other. Fixed to
+  `determinism:intermittent`. Root cause math wrong (47s single message < 5min default timeout).
+  Added explicit `max.poll.interval.ms:30000` to prompt.
+- FE-021: Partial credit tested output quality not diagnosis accuracy. Replaced.
+- FE-023 (CRITICAL): Fix code used `router.onError()` and `router.afterEach()` — Vue Router APIs.
+  Stack is React Router 6.22. Replaced with correct React Router 6 `errorElement` + `useRouteError`.
+- JV-016: Partial credit rewarded "downgrade the JAR" which was also in rejected_fix_patterns.
+  Moved to fail_conditions.
+- JV-017: `elapsed` variable undefined in code excerpt. Fixed with `System.currentTimeMillis()-start`.
+- JV-018: Root cause depended on Long/Integer type mismatch never shown in prompt. Added
+  UserProfile class with `Integer getId()`. verify.md signature change missing controller update.
+- JV-019: `doGet` in `OrderServlet` (`@WebServlet("/orders")`) but redirect went to `/confirmation`
+  — 404. Fixed with `ConfirmationServlet @WebServlet("/confirmation")`.
 
 ## [1.11] - 2026-04-04
 

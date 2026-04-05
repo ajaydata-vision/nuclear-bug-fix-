@@ -58,6 +58,7 @@ Scored against 161 real-world bug cases across 13 domains:
 | React Native (Metro/Navigation/Reanimated/Expo) | 26 | 96.2 |
 | Frontend JS/TS (React/Vue/vanilla/async/CSS) | 51 | 94.7 |
 | Kafka / Messaging | — | 92.3 |
+| PHP (Laravel + plain PHP) | 45 | 94.6 |
 | Backend, Integration, Mobile | 38–45 | 91–95 |
 
 ---
@@ -67,10 +68,11 @@ Scored against 161 real-world bug cases across 13 domains:
 ```
 nuclear-bug-fix/
 ├── SKILL.md                      # Core methodology — 6 phases, DDx gate, 35 ironclad rules
-├── references/                   # 13 reference files — 241 patterns (100% Prove coverage)
+├── references/                   # 14 reference files — 288 patterns (100% Prove coverage)
 │   ├── java-patterns.md          # 49 patterns: Servlet/JSP/NIO/Threading/JVM/Spring/Kafka/Loom
-│   ├── frontend-patterns.md      # 51 patterns: React/Vue/Angular/vanilla JS/CSS/async/TypeScript
+│   ├── frontend-patterns.md      # 53 patterns: React/Vue/Angular/vanilla JS/CSS/async/TypeScript
 │   ├── react-native-patterns.md  # 26 patterns: Metro/Navigation/FlatList/Reanimated/Expo/perms
+│   ├── php-patterns.md           # 45 patterns: Execution model/OPcache/type-system/Laravel/PHP-FPM/PDO
 │   ├── backend-patterns.md       # 38 patterns: API/auth/DB/jobs/session/rate-limit/security
 │   ├── integration-patterns.md   # 32 patterns: webhooks/queues/microservices/ETL/K8s/CI-CD
 │   ├── bug-patterns.md           # 45 patterns: async/types/env/caching/memory — any stack
@@ -87,8 +89,8 @@ nuclear-bug-fix/
     └── release.json              # Release manifest
 ```
 
-**Current release:** `1.13` · **Release date:** `2026-04-04`  
-**Total patterns:** 241 · **All with targeted Prove sections** · **100% Prove coverage**
+**Current release:** `1.16` · **Release date:** `2026-04-05`  
+**Total patterns:** 288 · **All with targeted Prove sections** · **100% Prove coverage**
 
 ---
 
@@ -125,6 +127,8 @@ Borrowed from medical differential diagnosis and the CIA's Analysis of Competing
 **🔗 Integration & Pipelines** — Webhooks, Kafka, microservice cascading failures, ETL, CI/CD, K8s readiness probes, API gateway header stripping, distributed sagas
 
 **🐍 Python Desktop / Bridge / Packaged** — PyQt6/qasync, Baileys-style bridges, PyInstaller frozen runtime
+
+**🐘 PHP** — OPcache stale bytecode, loose comparison traps (`==` vs `===`, `empty()`, `in_array()`), Laravel (Eloquent N+1, queue silent fail, service container, config cache, middleware, events), PHP-FPM exhaustion, PDO ERRMODE_SILENT, transaction not committed, charset mismatch, CLI/FPM version split, `.env` not loaded in cron
 
 **🔬 Universal** — Race conditions, Heisenbugs, Mandelbugs, deadlocks, type coercion, timezone bugs, environment mismatch, memory leaks
 

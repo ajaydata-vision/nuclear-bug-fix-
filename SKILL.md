@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.16"
-  source_commit: "2151393a5ae7b2ed0c2006df63a4d5674396dd21"
+  version: "1.17"
+  source_commit: "82236a1f1b132546db107978b0bfea076cb72674"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -1070,7 +1070,9 @@ If the Phase 3.8 Prove was inconclusive → scan all patterns in the file now to
 |---|---|---|
 | `references/react-native-patterns.md` | Any React Native bug: Metro bundler, React Navigation, FlatList/lists, Animated/Reanimated, Expo/EAS, AsyncStorage, native modules, New Architecture (JSI), platform permissions, Hermes, Fast Refresh | Metro cache, navigation stack, list rendering, worklet crashes, build environment, state/storage, native linking, debug interference |
 | `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing bug, generic mobile (non-RN) | Rendering, hydration, state, CSS, forms, WebSocket, browser compat, performance |
-| `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
+| `references/java-patterns.md` | Any Java Enterprise bug: Servlet/JSP, NIO, threading, JVM/ClassLoader, JDBC, Spring Boot (Transactional, Async, Scheduling, Cache, Security, Hibernate, WebFlux), Kafka, Virtual Threads | Servlet lifecycle, JSP scope/JSTL, ByteBuffer, ThreadLocal, OOM, HikariCP, @Transactional self-invocation, N+1, rebalance storm, pinned virtual thread |
+| `references/php-patterns.md` | Any PHP bug: OPcache, type system (== vs ===, empty, in_array), Laravel (Eloquent, queues, service container, config cache, middleware), PHP-FPM, PDO, version mismatch, environment split | Run Visibility Prerequisite first (display_errors=Off default). OPcache stale, loose comparison, N+1, queue silent, FPM exhaustion, PDO ERRMODE, transaction, charset, CLI/FPM split |
+| `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug (non-Java, non-PHP) | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/python-desktop-patterns.md` | PyQt6/qasync/UI-thread-affinity/desktop scheduler or websocket bugs | Loop ownership, async slots, UI freezes, shutdown cleanup, desktop SQLite usage |
 | `references/bridge-adapter-patterns.md` | Python<->Node bridges, stdout-framed protocols, reconnect/listener bugs, unofficial client/scraper drift | IPC lifecycle, framing discipline, reconnect ordering, provider drift handling |
 | `references/windows-packaging-patterns.md` | Works from source but fails when frozen / packaged | PyInstaller layout, `_MEIPASS`, hidden imports, Qt plugins, writable paths, bundled helpers |

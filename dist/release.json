@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.16",
-  "source_commit": "2151393a5ae7b2ed0c2006df63a4d5674396dd21",
-  "source_commit_short": "2151393",
+  "version": "1.17",
+  "source_commit": "82236a1f1b132546db107978b0bfea076cb72674",
+  "source_commit_short": "82236a1",
   "source_date": "2026-04-05",
-  "source_subject": "v1.15: PHP reference file \u2014 45 patterns, 10 categories",
+  "source_subject": "v1.16: PHP self-eval 94.6/100 + OPcache guard log fix",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

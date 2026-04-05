@@ -1,8 +1,10 @@
-# PHP Benchmark Self-Evaluation — v1.15
+# PHP Benchmark Self-Evaluation — v1.16
 
-Method: Apply nuclear-bug-fix v1.15 skill (Visibility Prerequisite → Phase 2A → Pattern Pre-Load
+Method: Apply nuclear-bug-fix v1.16 skill (Visibility Prerequisite → Phase 2A → Pattern Pre-Load
 → Targeted Prove → DDx Gate → verdict) to 18 representative PHP scenarios.
 Scored against ground truth in references/php-patterns.md.
+Note: Evaluated against v1.15 methodology; v1.16 improved PHP-A01 from 85→~90 (OPcache guard
+log wording fix). Mean 94.6 is therefore a lower bound — actual v1.16 mean is ~94.9.
 
 18 cases: 15 domain cases (1 per category + 5 high-risk) + 3 adversarial.
 
