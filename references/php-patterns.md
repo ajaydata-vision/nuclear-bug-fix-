@@ -52,7 +52,7 @@ $file = realpath('/var/www/html/app/Services/PaymentService.php'); // ← your c
 $status = opcache_get_status(false);
 
 if ($status === false) {
-    error_log('[OPCACHE-PROVE] OPcache not active in this FPM pool — not the cause');
+    error_log('[OPCACHE-PROVE] opcache_get_status() returned false — either OPcache is disabled in this pool, OR you ran this from CLI (opcache.enable_cli=0 by default). This script MUST be hit via a browser/web request to reflect FPM state. Re-run via browser.');
     exit;
 }
 

@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.15",
-  "source_commit": "9172d29cd1d1b6839171c8d4456761ce39383a9f",
-  "source_commit_short": "9172d29",
+  "version": "1.16",
+  "source_commit": "2151393a5ae7b2ed0c2006df63a4d5674396dd21",
+  "source_commit_short": "2151393",
   "source_date": "2026-04-05",
-  "source_subject": "v1.14: CLS tracker + INP + LCP patterns from adversarial review",
+  "source_subject": "v1.15: PHP reference file \u2014 45 patterns, 10 categories",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

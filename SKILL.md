@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.15"
-  source_commit: "9172d29cd1d1b6839171c8d4456761ce39383a9f"
+  version: "1.16"
+  source_commit: "2151393a5ae7b2ed0c2006df63a4d5674396dd21"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
