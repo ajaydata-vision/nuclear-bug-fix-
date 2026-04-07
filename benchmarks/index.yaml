@@ -1,7 +1,7 @@
 suite:
   name: nuclear-bug-fix-benchmarks
   version: 1
-  current_case_count: 161
+  current_case_count: 179
   purpose: Measure first-shot bug-fix accuracy, false-positive rate, and verification quality.
 
 tracks:
@@ -54,6 +54,9 @@ domains:
     current_cases: 5
   - id: kafka
   - id: php
+  - id: elixir
+    description: Elixir/Phoenix/LiveView/OTP/Oban bugs — GenServer deadlock and state contamination, stale PID after supervisor restart, with/1 silent short-circuit, LiveView silent form save / double mount / PubSub duplicates / stale closure / hidden_input, Ecto N+1 / Multi rollback / constraint race, Oban struct-in-args / wrong return value, Phoenix Plug auth bypass. 3 adversarial cases covering production IEx constraint, test environment gap, and partial struct serialization.
+    current_cases: 18
     description: PHP execution model (shared-nothing, OPcache, headers), type system (loose comparison traps), Laravel (Eloquent, queues, service container, config cache), PHP-FPM (worker exhaustion, timeouts), PDO, Eloquent ORM, PHP version and environment mismatches.
     current_cases: 0
     description: Consumer offset/auto-reset, rebalance storms, poison pill deserialization blocking.

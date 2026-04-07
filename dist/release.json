@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.18",
-  "source_commit": "ed899fc4a738c4320349deecdf449084ec3832dd",
-  "source_commit_short": "ed899fc",
+  "version": "1.19",
+  "source_commit": "8a510dc940315e5b91ac378f05df4fcacb6c31b5",
+  "source_commit_short": "8a510dc",
   "source_date": "2026-04-07",
-  "source_subject": "v1.18: Elixir/Phoenix reference file \u2014 15 patterns, 5 categories",
+  "source_subject": "v1.18 post-adversarial: 7 defects fixed in elixir-patterns.md",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
