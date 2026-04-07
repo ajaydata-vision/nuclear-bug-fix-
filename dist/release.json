@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
   "version": "1.19",
-  "source_commit": "8a510dc940315e5b91ac378f05df4fcacb6c31b5",
-  "source_commit_short": "8a510dc",
+  "source_commit": "57d68e3c459ccded45b531a7e2bf1cff9648cbba",
+  "source_commit_short": "57d68e3",
   "source_date": "2026-04-07",
-  "source_subject": "v1.18 post-adversarial: 7 defects fixed in elixir-patterns.md",
+  "source_subject": "v1.19: Elixir benchmark cases (18) + self-eval 94.3/100",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

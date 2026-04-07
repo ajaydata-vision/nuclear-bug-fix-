@@ -16,15 +16,8 @@
 
 ## Ground Truth
 
-- root_cause: `Repo.transaction(multi)` returns `{:ok, %{account: ..., user: ..., profile: ...}}` on success or `{:error, failed_step, changeset, completed}` on failure. The function discards the transaction result entirely and always returns `{:ok, "account created"}`. If the `:user` or `:profile` step fails (e.g., email uniqueness constraint, missing required field), the transaction rolls back ALL steps including the `:account` insert — but the function still returns `{:ok, "account created"}`. Actually, given only account is found in DB: the account insert succeeds, then a later step fails, the transaction rolls back account too — but maybe the caller is calling something else, or the account was created outside the Multi. 
-
-  More precisely: the return value of `Repo.transaction(multi)` is discarded. The bare `{:ok, "account created"}` is always returned. The Multi may have failed at the :user step (email already taken, etc.) causing a rollback of all steps including account. But if account is present in DB, the transaction must have succeeded but only account creation matters to this bug. 
-
-  Actually: account IS in DB, user and profile are NOT. This means the Multi ran, account was committed, but user/profile were not. This can happen if: (a) the transaction returned {:error, :user, ...} and the account somehow bypassed the transaction — impossible with Multi. More likely: there are TWO operations: one that creates the account directly (outside the Multi) and one Multi call that fails for user/profile. The result of the Multi is discarded so the error is hidden.
-
-  Simplest interpretation: Repo.transaction result discarded → {:error, :user, changeset, %{account: account}} returned by transaction but caller sees {:ok, "account created"} → user and profile not created, account rolled back but a separate Account.changeset was called before the Multi and committed separately.
-
-- why_it_happens: `Repo.transaction(multi)` return value is discarded. Always returning `{:ok, "account created"}` hides any failure from the Multi.
+- root_cause: The return value of `Repo.transaction(multi)` is discarded. The function always returns `{:ok, "account created"}` regardless of whether the transaction succeeded or failed. When the `:user` step fails (email uniqueness constraint, missing required field, etc.), `Repo.transaction` returns `{:error, :user, changeset, %{account: account}}` and rolls back ALL steps — including the account insert. The caller receives `{:ok, "account created"}` and concludes success. The account, user, and profile are all absent from the database.
+- why_it_happens: `Repo.transaction` return value must be pattern-matched to know whether the transaction succeeded. A bare `{:ok, "account created"}` after the `Repo.transaction` call — without piping or matching the result — discards both the success data and any error information. Ecto.Multi is all-or-nothing: if any step fails, all completed steps are rolled back atomically.
 - accepted_fix: Pattern-match on `Repo.transaction(multi)` result and return the actual outcome.
 - rejected_fix_patterns:
   - use bang functions inside Multi (raises exceptions — harder to handle)
