@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
   "version": "1.19",
-  "source_commit": "57d68e3c459ccded45b531a7e2bf1cff9648cbba",
-  "source_commit_short": "57d68e3",
+  "source_commit": "1e0dfc8f897a37fe2a56f8f6241e6bf745d9ebf8",
+  "source_commit_short": "1e0dfc8",
   "source_date": "2026-04-07",
-  "source_subject": "v1.19: Elixir benchmark cases (18) + self-eval 94.3/100",
+  "source_subject": "v1.19 targeted fixes: 3 benchmark case defects",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
