@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
   "version": "1.18",
-  "source_commit": "cdb59bd11a29499dcedda127fb48e4b83bf7cf6c",
-  "source_commit_short": "cdb59bd",
-  "source_date": "2026-04-05",
-  "source_subject": "v1.17 release: fix release.json source_commit and subject",
+  "source_commit": "ed899fc4a738c4320349deecdf449084ec3832dd",
+  "source_commit_short": "ed899fc",
+  "source_date": "2026-04-07",
+  "source_subject": "v1.18: Elixir/Phoenix reference file \u2014 15 patterns, 5 categories",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

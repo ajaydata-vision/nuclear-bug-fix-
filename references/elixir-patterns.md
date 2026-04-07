@@ -29,9 +29,16 @@ grep "Child.*started" log/dev.log
 # Crashes appear in the terminal running the server, not the browser console
 
 # 4. For Oban jobs — jobs fail silently until max_attempts exhausted
-# Check for discarded jobs before concluding the job never ran:
-#   iex> Oban.check_queue(queue: :default)
-#   SQL: SELECT id, state, errors FROM oban_jobs WHERE state IN ('retryable','discarded');
+# Check for discarded/retrying jobs before concluding the job never ran:
+#   SQL (works anywhere):
+#   SELECT id, worker, state, attempt, max_attempts, errors
+#   FROM oban_jobs WHERE state IN ('retryable','discarded') ORDER BY attempted_at DESC LIMIT 20;
+#
+#   IEx (if available):
+#   import Ecto.Query
+#   MyApp.Repo.all(from j in Oban.Job,
+#     where: j.state in ["discarded","retryable"],
+#     order_by: [desc: j.attempted_at], limit: 10)
 
 # 5. For LiveView — errors appear in server logs, NOT in the browser console
 # Always check the mix phx.server terminal, not browser DevTools
@@ -312,22 +319,27 @@ end
 ### Pattern: LiveView PubSub duplicate messages — every broadcast received twice by the same LiveView
 **Symptom:** Every real-time update appears twice in the UI. When someone posts a message, it appears twice in the chat. When a record updates, two identical `handle_info` callbacks fire. The duplication is consistent — always exactly 2×, never 3× or intermittent.
 **Why:** `Phoenix.PubSub.subscribe/2` is called in `mount/3` without a `connected?(socket)` guard. Since `mount/3` runs twice (HTTP + WebSocket), the same LiveView process subscribes to the same topic twice. Every subsequent broadcast is delivered twice to that process, triggering two `handle_info` callbacks.
-**Prove:**
+**Prove:** Add a counter to `handle_info/2` to detect how many times a single broadcast arrives:
 ```elixir
-# In the LiveView, check how many subscriptions exist for this process:
-# Add temporarily to mount/3:
+# Step 1 — add a process-level counter at the top of your LiveView module:
 def mount(_params, _session, socket) do
-  Phoenix.PubSub.subscribe(MyApp.PubSub, "updates:#{room_id}")  # current code
-  
-  # Prove: how many times has this process subscribed?
-  subscribers = Phoenix.PubSub.subscribers(MyApp.PubSub, "updates:#{room_id}")
-  own_count = Enum.count(subscribers, &(&1 == self()))
-  IO.inspect(own_count, label: "[PUBSUB-PROVE] subscription count for this pid")
-  # own_count = 2 → subscribed twice → every message delivered twice → bug confirmed
+  Process.put(:pubsub_receive_count, 0)  # reset counter on each mount
+  Phoenix.PubSub.subscribe(MyApp.PubSub, "updates:#{room_id}")  # current code unchanged
   {:ok, socket}
 end
+
+# Step 2 — count every handle_info invocation for the broadcast message:
+def handle_info({:new_message, msg}, socket) do
+  count = Process.get(:pubsub_receive_count, 0) + 1
+  Process.put(:pubsub_receive_count, count)
+  IO.puts("[PUBSUB-PROVE] handle_info call ##{count} for pid=#{inspect(self())}")
+  # Broadcast ONE message via Phoenix.PubSub.broadcast(MyApp.PubSub, "updates:...", {:new_message, %{}})
+  # Expected: "[PUBSUB-PROVE] handle_info call #1 ..." printed once
+  # Bug:      "[PUBSUB-PROVE] handle_info call #1 ..." AND "#2 ..." for one broadcast → subscribed twice
+  {:noreply, socket}
+end
 ```
-`own_count = 2` — two subscriptions for the same PID on the same topic — is pathognomonic. Each broadcast delivers once per subscription.
+Two `handle_info` calls for a single `broadcast` is pathognomonic — the same process holds two subscriptions to the same topic, so each broadcast is delivered twice.
 **Fix:** Always guard PubSub subscriptions with `connected?(socket)`:
 ```elixir
 # WRONG — subscribes on HTTP mount AND WebSocket mount = 2 subscriptions
@@ -348,42 +360,48 @@ end
 ---
 
 ### Pattern: LiveView `assign_async` stale closure — async result always shows initial or stale value
-**Symptom:** `assign_async` is used to load data asynchronously. The data loads but always shows an old value — the user's name, their permissions, or a tenant ID from when the socket was first created. Changing the value and re-navigating to the LiveView still shows the old value. The async task itself runs correctly.
-**Why:** Elixir closures capture the value of variables at the moment the closure is defined. When `assign_async` is written as `assign_async(socket, :data, fn -> fetch(socket.assigns.current_user) end)`, the closure captures `socket.assigns.current_user` at mount time. If the socket is later updated (different user, permission change, reconnect), the closure still holds the original captured value and uses it for all subsequent fetches.
-**Prove:**
+**Symptom:** `assign_async` is used to load data asynchronously. The data loads but always shows an old value — a user ID, permission scope, or tenant that belonged to the previous navigation state. The async task itself runs (the `{:ok, %{...}}` is returned). But the fetched data is for the wrong context. Navigating to a different record or user shows stale data from the previous one.
+**Why:** Elixir closures capture the value of **variables** at the moment the closure is defined — not the value of `socket.assigns` at execution time. The bug occurs in `handle_params/3`: when the user navigates to a new record, `handle_params` is called with new params and triggers `assign_async`. But if the closure references `socket.assigns.current_scope` directly instead of an extracted local variable, the closure captures the socket from `handle_params`'s parameter — which may be the *old* socket before the new assigns were applied. The async task then fetches data for the old scope.
+**Prove:** Add inspection inside the `assign_async` closure in `handle_params/3` to compare captured vs expected values:
 ```elixir
-# Extract the captured value BEFORE the closure and inspect it:
-def mount(_params, _session, socket) do
-  current_user = socket.assigns.current_user
-  IO.inspect(current_user.id, label: "[ASYNC-CLOSURE-PROVE] user_id captured in closure")
+def handle_params(%{"id" => id}, _uri, socket) do
+  # Extract BEFORE any socket update — this is what the closure will capture
+  old_scope_id = socket.assigns.scope.id
+  IO.inspect(old_scope_id, label: "[ASYNC-CLOSURE-PROVE] scope.id at closure definition")
 
-  {:ok,
-   assign_async(socket, :profile, fn ->
-     IO.inspect(current_user.id, label: "[ASYNC-CLOSURE-PROVE] user_id INSIDE closure at execution")
-     {:ok, %{profile: Accounts.get_profile(current_user)}}
+  # Update socket with new scope
+  socket = assign(socket, :scope, MyApp.get_scope(id))
+
+  {:noreply,
+   assign_async(socket, :data, fn ->
+     # This runs asynchronously — what scope.id does it use?
+     IO.inspect(old_scope_id, label: "[ASYNC-CLOSURE-PROVE] scope.id INSIDE closure")
+     # If old_scope_id ≠ id (the new param) → closure is fetching for the WRONG scope
+     {:ok, %{data: MyApp.fetch(old_scope_id)}}
    end)}
 end
-# If inside-closure user_id differs from expected current user → stale capture confirmed
-# This is especially clear when the LiveView is reused for different users
+# Trigger by navigating: /items/1 then /items/2 quickly
+# If "[INSIDE closure] scope.id = 1" when you navigated to /items/2 → stale capture confirmed
 ```
-If the user ID inside the closure differs from the currently expected user → closure captured a stale value.
-**Fix:** Always extract values needed in the closure BEFORE defining it, and pass them as function arguments:
+`old_scope_id` inside the closure differing from the current navigation target is pathognomonic.
+**Fix:** Extract the value you need *after* the socket update, then pass it into the closure:
 ```elixir
-# WRONG — closure captures the entire socket.assigns at mount time
-def mount(_params, _session, socket) do
-  {:ok,
-   assign_async(socket, :profile, fn ->
-     {:ok, %{profile: Accounts.get_profile(socket.assigns.current_user)}}
-     # socket.assigns.current_user is captured from mount-time socket — may be stale
+# WRONG — closure captures socket from handle_params param (may be pre-update socket)
+def handle_params(%{"id" => id}, _uri, socket) do
+  socket = assign(socket, :scope, MyApp.get_scope(id))
+  {:noreply,
+   assign_async(socket, :data, fn ->
+     {:ok, %{data: MyApp.fetch(socket.assigns.scope.id)}}  # captures old socket, not updated one
    end)}
 end
 
-# CORRECT — extract needed values first, closure captures only the extracted value
-def mount(_params, _session, socket) do
-  current_user = socket.assigns.current_user  # extract BEFORE the closure
-  {:ok,
-   assign_async(socket, :profile, fn ->
-     {:ok, %{profile: Accounts.get_profile(current_user)}}  # local variable, not socket.assigns
+# CORRECT — extract from the UPDATED socket, then close over the local variable
+def handle_params(%{"id" => id}, _uri, socket) do
+  socket = assign(socket, :scope, MyApp.get_scope(id))
+  scope_id = socket.assigns.scope.id  # extracted from UPDATED socket
+  {:noreply,
+   assign_async(socket, :data, fn ->
+     {:ok, %{data: MyApp.fetch(scope_id)}}  # local variable — correct value
    end)}
 end
 ```
@@ -536,7 +554,7 @@ end
 
 ### Pattern: Ecto unique constraint race — validation passes, DB constraint violation in production under load
 **Symptom:** `Repo.insert(changeset)` raises `Ecto.ConstraintError` or returns `{:error, changeset}` with a `unique_constraint` error. But the changeset validation passed — `changeset.valid?` was `true`. The error only occurs under concurrent load, not in single-user testing. A `unique_index` exists on the column.
-**Why:** The validation check (`validate_uniqueness` or a custom check) runs a `SELECT` to see if the value exists. If two concurrent requests both pass the `SELECT` check at the same time (the value does not exist yet for either), both proceed to `INSERT`. The second `INSERT` hits the database-level unique constraint. The validation caught nothing because the race window is between the check and the insert.
+**Why:** The validation check (a custom `Repo.exists?` or `Repo.get_by` call before insert) runs a `SELECT` to see if the value exists. If two concurrent requests both pass the `SELECT` check at the same time (the value does not exist yet for either), both proceed to `INSERT`. The second `INSERT` hits the database-level unique constraint. The validation caught nothing because the race window is between the check and the insert.
 **Prove:**
 ```elixir
 # Reproduce with concurrent requests (use Task.async_stream or ab/wrk):
@@ -567,7 +585,8 @@ def changeset(user, attrs) do
   |> validate_required([:email])
   |> validate_format(:email, ~r/@/)
   |> unique_constraint(:email)  # converts ConstraintError to {:error, changeset}
-  # Do NOT use validate_uniqueness — it does a SELECT before INSERT (race condition)
+  # Do NOT do a manual Repo.exists?/Repo.get_by check before Repo.insert —
+  # that SELECT-then-INSERT pattern has a race window between the two operations
 end
 
 # 3. Caller handles the error cleanly:
@@ -617,7 +636,10 @@ Oban.insert(MyApp.Workers.EmailWorker.new(%{user: %User{id: 42, email: "a@b.com"
 
 # WRONG — atom keys in args become string keys after JSON round-trip
 Oban.insert(MyApp.Workers.EmailWorker.new(%{user_id: 42}))
-def perform(%Oban.Job{args: %{user_id: id}}) do  # atom key — never matches
+# args stored in DB: %{"user_id" => 42}  (string keys — JSON conversion)
+def perform(%Oban.Job{args: %{user_id: id}}) do  # atom key pattern — NEVER matches string key
+  send_email(id)  # this line never executes
+end
 
 # CORRECT — plain values, string key pattern match
 Oban.insert(MyApp.Workers.EmailWorker.new(%{user_id: 42, order_id: 7}))
@@ -688,20 +710,27 @@ end
 ### Pattern: Phoenix Plug pipeline auth bypass — protected route accessible without authentication
 **Symptom:** A route that should require authentication is accessible without logging in. The authentication plug exists and works on other routes. Adding the authentication check directly in the controller action works. Removing it breaks things. But the route remains accessible without authentication even with the plug defined.
 **Why:** Phoenix applies plugs in pipeline order. A route is protected only if it is inside a `pipe_through` scope that includes the authentication plug. Routes defined outside that scope, or inside a scope with a different pipeline, bypass the plug entirely. The plug is registered — it just is not applied to that specific route.
-**Prove:**
+**Prove:** Two steps — confirm the route exists, then find which pipeline scope owns it:
 ```bash
-# List all routes with their full pipeline (the most direct Prove):
-mix phx.routes
+# Step 1 — confirm the route is registered at all:
+mix phx.routes | grep "reports"
+# Output: GET  /admin/reports  MyAppWeb.ReportController  :index
+# (mix phx.routes shows: verb, path, controller, action — no pipeline column)
+# Route exists → the issue is which pipeline applies, not whether the route is defined.
 
-# Look at the Middleware/Pipeline column for the protected route.
-# Example output:
-#   GET  /admin/users    AdminController :index    [browser, :require_authenticated_user]
-#   GET  /admin/reports  ReportController :index   [browser]   ← missing auth plug!
-
-# To see the exact pipeline for one path:
-mix phx.routes | grep "admin/reports"
+# Step 2 — find the scope that owns this route in router.ex:
+grep -n "reports\|pipe_through\|scope" lib/my_app_web/router.ex
+# Look for the scope block that contains "get "/reports""
+# If that scope's pipe_through list does NOT include your auth plug → bug confirmed
 ```
-The route appearing in `mix phx.routes` without the authentication plug in its pipeline is pathognomonic — the plug is not applied regardless of what is in the controller.
+Finding the route inside a `scope` block whose `pipe_through` omits the auth plug is pathognomonic — the plug is never invoked for that route regardless of what is in the controller.
+**Verify after fix:**
+```bash
+# After moving the route into the authenticated scope, confirm no 401/redirect is skipped:
+curl -I http://localhost:4000/admin/reports
+# Expected: HTTP/1.1 302 Found  Location: /login  (redirect to login)
+# Bug state was: HTTP/1.1 200 OK  (no redirect)
+```
 **Fix:** Ensure the protected route is inside a scope that `pipe_through` the authentication plug:
 ```elixir
 # WRONG — /admin/reports is outside the authenticated scope
@@ -722,6 +751,6 @@ scope "/admin", MyAppWeb do
   get "/reports", ReportController, :index  # now protected
 end
 ```
-After the fix: `mix phx.routes | grep reports` should show the auth plug in the pipeline.
+After the fix: `curl -I http://localhost:4000/admin/reports` should return HTTP 302 (redirect to login), not HTTP 200.
 **Dead giveaway:** Two `scope "/admin"` blocks with different `pipe_through` configurations. Routes accidentally placed in the lower-privilege scope.
 

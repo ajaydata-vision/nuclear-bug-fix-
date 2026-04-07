@@ -2,7 +2,7 @@
 name: nuclear-bug-fix
 metadata:
   version: "1.18"
-  source_commit: "cdb59bd11a29499dcedda127fb48e4b83bf7cf6c"
+  source_commit: "ed899fc4a738c4320349deecdf449084ec3832dd"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -691,9 +691,12 @@ Elixir:       IO.inspect(var, label: "[DEBUG] var", structs: false)
               :sys.get_state(MyApp.Server)          # state — HANGS = deadlocked mailbox
               Process.info(pid, :message_queue_len) # {:message_queue_len, N} — >100 = backed up
               Process.alive?(pid)                   # false = stale PID after supervisor restart
-              # with/1 chain — find which step short-circuits:
-              with {:ok, a} <- step_one() |> IO.inspect(label: "[DEBUG] step1"),
-                   {:ok, b} <- step_two(a) |> IO.inspect(label: "[DEBUG] step2") do ...
+              # with/1 chain — find which step short-circuits (add |> IO.inspect to each <-):
+              with {:ok, a} <- step_one()    |> IO.inspect(label: "[DEBUG] step1"),
+                   {:ok, b} <- step_two(a)   |> IO.inspect(label: "[DEBUG] step2"),
+                   {:ok, c} <- step_three(b) |> IO.inspect(label: "[DEBUG] step3") do
+                :ok  # last IO.inspect that printed = last step that ran; gap = short-circuit point
+              end
 ```
 
 ```
