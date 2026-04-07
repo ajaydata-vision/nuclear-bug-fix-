@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.17"
-  source_commit: "ea56aa58ed9adf9406ce2f300aa6888b36bf9845"
+  version: "1.18"
+  source_commit: "cdb59bd11a29499dcedda127fb48e4b83bf7cf6c"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -213,6 +213,7 @@ Identify the domain FIRST — determines which reference file to load.
 | **Frozen / Packaged Runtime** | Works from source, fails in `.exe`; PyInstaller onefile/onedir bug; bundled data missing; hidden import missing; child process or asset not found; writable path differs from dev | `references/windows-packaging-patterns.md` |
 | **Java Enterprise** | Users see each other's data, JSP shows stale content, NIO sends garbage or empty response, transaction didn't roll back, lazy loading exception, app hangs on shutdown, ClassCastException after WAR deploy, connection pool timeout, filter not applying, OutOfMemoryError in prod, Spring Security context empty, session has wrong values, @Transactional has no effect, @Async method running synchronously, @Scheduled never fires, Spring cache returning stale data, Kafka consumer not receiving messages, consumer rebalance storm, virtual thread throughput not improving, javax.* ClassNotFoundException after Spring Boot 3 upgrade | `references/java-patterns.md` |
 | **PHP** | OPcache stale code after deploy, `==` vs `===` auth bypass, Eloquent N+1, queue job silent fail, `empty()` drops valid form value, PHP-FPM worker exhaustion, headers already sent, `session_start()` missing, composer autoload not regenerated, Laravel service container binding not found, Blade template cached with old output, CSRF 419 on form POST, transaction not committed on exception, persistent PDO connection leaks state, PHP CLI and FPM on different versions, `.env` not loaded in cron context, composer runtime version conflict | `references/php-patterns.md` |
+| **Elixir / Phoenix** | GenServer crash or call timeout, GenServer.call blocks forever (deadlock), LiveView `handle_event` fires but nothing happens, LiveView form save silent, LiveView double mount side effect, Phoenix.PubSub message duplicated, `mount/3` runs twice, `Oban.Worker` `perform/1` no effect, job completes but logic skipped, Ecto.Multi rollback invisible, Ecto constraint error under load, `with/1` chain returns wrong value silently, supervisor restarting repeatedly, stale PID noproc error, `mix phx.server`, `iex -S mix`, `Ecto.Repo`, `Oban.Worker`, `handle_event/3`, Phoenix.Channel | `references/elixir-patterns.md` |
 | **Integration/Pipeline** | Webhook not firing, message queue dropped, microservice not responding, data transform wrong, ETL dropping rows, CI/CD broken, API gateway wrong, event not propagating | `references/integration-patterns.md` |
 | **General/Cross-cutting** | Async/concurrency, environment mismatch, encoding, type bugs, caching, memory | `references/bug-patterns.md` |
 
@@ -683,6 +684,16 @@ Java (SLF4J+MDC — servlet-container safe, thread-aware):
               // NIO: log.debug("[DEBUG] buf pos={} lim={} remaining={}", buf.position(), buf.limit(), buf.remaining());
               // Deadlock: long[] d = ManagementFactory.getThreadMXBean().findDeadlockedThreads(); log.debug("deadlocked={}", Arrays.toString(d));
 Go:           log.Printf("[DEBUG] %T %+v", var, var)
+Elixir:       IO.inspect(var, label: "[DEBUG] var", structs: false)
+              value |> IO.inspect(label: "[DEBUG] pipeline step")  # inside pipes
+              IO.inspect(binding(), label: "[DEBUG] all local vars")  # every var in scope
+              # GenServer / Process (dev/staging with IEx — requires running node access):
+              :sys.get_state(MyApp.Server)          # state — HANGS = deadlocked mailbox
+              Process.info(pid, :message_queue_len) # {:message_queue_len, N} — >100 = backed up
+              Process.alive?(pid)                   # false = stale PID after supervisor restart
+              # with/1 chain — find which step short-circuits:
+              with {:ok, a} <- step_one() |> IO.inspect(label: "[DEBUG] step1"),
+                   {:ok, b} <- step_two(a) |> IO.inspect(label: "[DEBUG] step2") do ...
 ```
 
 ```
@@ -1071,6 +1082,7 @@ If the Phase 3.8 Prove was inconclusive → scan all patterns in the file now to
 | `references/react-native-patterns.md` | Any React Native bug: Metro bundler, React Navigation, FlatList/lists, Animated/Reanimated, Expo/EAS, AsyncStorage, native modules, New Architecture (JSI), platform permissions, Hermes, Fast Refresh | Metro cache, navigation stack, list rendering, worklet crashes, build environment, state/storage, native linking, debug interference |
 | `references/frontend-patterns.md` | Any UI/browser/CSS/bundle/routing bug, generic mobile (non-RN) | Rendering, hydration, state, CSS, forms, WebSocket, browser compat, performance |
 | `references/java-patterns.md` | Any Java Enterprise bug: Servlet/JSP, NIO, threading, JVM/ClassLoader, JDBC, Spring Boot (Transactional, Async, Scheduling, Cache, Security, Hibernate, WebFlux), Kafka, Virtual Threads | Servlet lifecycle, JSP scope/JSTL, ByteBuffer, ThreadLocal, OOM, HikariCP, @Transactional self-invocation, N+1, rebalance storm, pinned virtual thread |
+| `references/elixir-patterns.md` | Any Elixir/Phoenix/LiveView/OTP/Oban bug: GenServer deadlock or state contamination, stale PID after restart, with/1 silent short-circuit, LiveView silent form save / double mount / PubSub duplicates / stale closure / hidden_input, Ecto N+1 / Multi rollback / constraint race, Oban struct-in-args / wrong return value, Phoenix Plug auth bypass | Run Visibility Prerequisite first (BEAM supervisor hides crashes). :sys.get_state, Process.alive?, IO.inspect binding, telemetry attach, mix phx.routes |
 | `references/php-patterns.md` | Any PHP bug: OPcache, type system (== vs ===, empty, in_array), Laravel (Eloquent, queues, service container, config cache, middleware), PHP-FPM, PDO, version mismatch, environment split | Run Visibility Prerequisite first (display_errors=Off default). OPcache stale, loose comparison, N+1, queue silent, FPM exhaustion, PDO ERRMODE, transaction, charset, CLI/FPM split |
 | `references/backend-patterns.md` | Any API/auth/DB/queue/job/session bug (non-Java, non-PHP) | REST/GraphQL, auth, ORM, background jobs, file upload, rate limiting, sessions |
 | `references/python-desktop-patterns.md` | PyQt6/qasync/UI-thread-affinity/desktop scheduler or websocket bugs | Loop ownership, async slots, UI freezes, shutdown cleanup, desktop SQLite usage |

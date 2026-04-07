@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.17",
-  "source_commit": "ea56aa58ed9adf9406ce2f300aa6888b36bf9845",
-  "source_commit_short": "ea56aa5",
+  "version": "1.18",
+  "source_commit": "cdb59bd11a29499dcedda127fb48e4b83bf7cf6c",
+  "source_commit_short": "cdb59bd",
   "source_date": "2026-04-05",
-  "source_subject": "v1.17: final adversarial pass \u2014 4 defects fixed",
+  "source_subject": "v1.17 release: fix release.json source_commit and subject",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
