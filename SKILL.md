@@ -1081,6 +1081,8 @@ The reference file was already loaded at Phase 2A. This phase is for **comprehen
 If the Phase 3.8 Prove matched cleanly → use Phase 4 to verify no alternative pattern in the same file produces an identical Prove output (sanity check before verdict).
 If the Phase 3.8 Prove was inconclusive → scan all patterns in the file now to find the next best candidate.
 
+**Authoring a new reference file?** Read `docs/reference-authoring-standards.md` BEFORE writing a single line. That document is the binding checklist (compile-sanity, version citations, adversarial review, SKILL.md wiring) and exists specifically to prevent the 14 defect classes caught in the `dotnet-patterns.md` v1 adversarial review. The repo-level `CLAUDE.md` summarizes the three blocking rules.
+
 | File | When to Load | Contents |
 |---|---|---|
 | `references/react-native-patterns.md` | Any React Native bug: Metro bundler, React Navigation, FlatList/lists, Animated/Reanimated, Expo/EAS, AsyncStorage, native modules, New Architecture (JSI), platform permissions, Hermes, Fast Refresh | Metro cache, navigation stack, list rendering, worklet crashes, build environment, state/storage, native linking, debug interference |
