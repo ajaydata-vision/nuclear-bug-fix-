@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.20",
-  "source_commit": "488d9dd5e8f7543b56014fbbadbbb3ac13d6248e",
-  "source_commit_short": "488d9dd",
+  "version": "1.21",
+  "source_commit": "bb4f2353dc2be1c24acf45f0bec70bc3491fa1fd",
+  "source_commit_short": "bb4f235",
   "source_date": "2026-04-14",
-  "source_subject": "v1.20: .NET coverage + 9 deduction-killing fixes + authoring standards + build hardening",
+  "source_subject": "v1.21 followup: replace section sign and >= with ASCII in Final Output Gate",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
