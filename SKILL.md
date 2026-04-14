@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.20"
-  source_commit: "488d9dd5e8f7543b56014fbbadbbb3ac13d6248e"
+  version: "1.21"
+  source_commit: "649992a2ffa27107e1f64b035db3cca2dd5cb3c2"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -1313,7 +1313,7 @@ free, without re-running the methodology.
        was never run, OR predicting an output without specifying what to look for.
        (Phase 3.8 — Rule 7.)
 
-[ ] 4. DDX GATE RAN. Either: (a) ≥2 competing hypotheses are named, each with the
+[ ] 4. DDX GATE RAN. Either: (a) two or more competing hypotheses are named, each with the
        specific evidence that eliminates it; OR (b) Phase 3.9 fast-path criteria
        apply — direct unambiguous proof such that "a reasonable engineer reading
        the log would have no alternative explanation" — and the response explicitly
@@ -1352,7 +1352,7 @@ free, without re-running the methodology.
        the fix took effect — make it especially explicit. (Phase 5.)
 
 [ ] 9. CLOSED PATHS NOT REVISITED. None of the things the user listed in Phase 1
-       §4 (CLOSED PATHS) appear as suggested actions in the response. If a closed
+       Section 4 (CLOSED PATHS) appear as suggested actions in the response. If a closed
        path is reopened, the new evidence that justifies reopening is named
        explicitly. (Rule 35.)
 ```
