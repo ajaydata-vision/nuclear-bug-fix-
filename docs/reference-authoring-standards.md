@@ -1,5 +1,15 @@
 # Reference File Authoring Standards
 
+> **CONTRIBUTOR-ONLY FILE — DO NOT BUNDLE INTO THE INSTALLED SKILL.**
+> This file lives under `docs/` at the source repository root. It is for
+> contributors editing the nuclear-bug-fix skill, NOT for users who install
+> and run it. The install allow-list (`ALLOWED_TOP_LEVELS` in
+> `scripts/install.py` and `scripts/install.sh`) does not include `docs/`,
+> and the defense-in-depth `FORBIDDEN_TOP_LEVELS` list explicitly blocks it.
+> See the header of `CLAUDE.md` at the repo root for the full rationale.
+
+---
+
 This document is the binding checklist for creating or editing files in
 `references/`. It is referenced from `CLAUDE.md` and from `SKILL.md`'s
 reference-file guide. Every Claude session that works on a reference

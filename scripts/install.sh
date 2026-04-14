@@ -88,7 +88,15 @@ import zipfile
 from pathlib import Path
 
 SKILL_NAME = "nuclear-bug-fix"
+# DO NOT add CLAUDE.md, docs, or .claude to ALLOWED_TOP_LEVELS.
+# Those entries are CONTRIBUTOR-ONLY (see CLAUDE.md and docs/reference-authoring-standards.md
+# at the source repo root). Bundling CLAUDE.md into the install would land it inside
+# `<user-project>/.claude/skills/nuclear-bug-fix/CLAUDE.md`, which either wastes the
+# user's tokens on irrelevant authoring rules OR collides with their own project-root
+# CLAUDE.md if a future install path ever moves it. Defense-in-depth: FORBIDDEN_TOP_LEVELS
+# is checked explicitly so a future maintainer cannot accidentally widen the allow-list.
 ALLOWED_TOP_LEVELS = ("SKILL.md", "README.md", "setup", "setup.ps1", "scripts", "references", "benchmarks")
+FORBIDDEN_TOP_LEVELS = ("CLAUDE.md", "docs", ".claude", ".github")
 
 archive_path = Path(sys.argv[1])
 target_dir = Path(sys.argv[2]).expanduser().resolve()
@@ -115,6 +123,17 @@ with tempfile.TemporaryDirectory() as temp_dir:
         raise SystemExit("Could not locate SKILL.md in the downloaded repository snapshot")
 
     repo_root = repo_roots[0]
+    # Defense-in-depth check: refuse to install if any forbidden top-level exists in
+    # the snapshot AND was somehow added to ALLOWED_TOP_LEVELS. A no-op today, but
+    # catches accidental future widenings of the allow-list.
+    for forbidden in FORBIDDEN_TOP_LEVELS:
+        if forbidden in ALLOWED_TOP_LEVELS:
+            raise SystemExit(
+                f"Install aborted: '{forbidden}' is in both ALLOWED_TOP_LEVELS and "
+                f"FORBIDDEN_TOP_LEVELS. This is a contributor-only entry that must "
+                f"never be bundled into a user's install. Remove it from "
+                f"ALLOWED_TOP_LEVELS in scripts/install.sh."
+            )
     for name in ALLOWED_TOP_LEVELS:
         source = repo_root / name
         if not source.exists():

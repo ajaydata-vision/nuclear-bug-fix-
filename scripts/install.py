@@ -12,6 +12,13 @@ from pathlib import Path, PurePosixPath
 
 SKILL_NAME = "nuclear-bug-fix"
 ARCHIVE_PREFIX = f"{SKILL_NAME}/"
+# DO NOT add CLAUDE.md, docs/, or .claude/ to either list below.
+# Those files are CONTRIBUTOR-ONLY (see CLAUDE.md and docs/reference-authoring-standards.md
+# at the source repo root). Bundling CLAUDE.md into the install would land it inside
+# `<user-project>/.claude/skills/nuclear-bug-fix/CLAUDE.md`, which either wastes the
+# user's tokens on irrelevant authoring rules OR — if a future install path ever moves
+# it — collides with the user's own project-root CLAUDE.md. The install allow-list is
+# the contract: only entries listed here are copied into the user's project.
 ALLOWED_TOP_LEVEL_FILES = (
     "SKILL.md",
     "README.md",
@@ -24,6 +31,14 @@ ALLOWED_TOP_LEVEL_DIRS = (
     "benchmarks",
 )
 ALLOWED_TOP_LEVELS = ALLOWED_TOP_LEVEL_FILES + ALLOWED_TOP_LEVEL_DIRS
+# Defense-in-depth: even if someone widens the allow-list above by mistake, these
+# top-level entries must NEVER end up in a user's install. Verified at install time.
+FORBIDDEN_TOP_LEVELS = (
+    "CLAUDE.md",
+    "docs",
+    ".claude",
+    ".github",
+)
 VERSION_PATTERN = re.compile(r"^\s{1,4}version:\s*(\S+)", re.MULTILINE)
 
 
@@ -176,6 +191,13 @@ def parse_archive_member_path(filename: str) -> Path | None:
         raise ValueError(f"Unsafe archive path: {filename}")
 
     top_level = parts[0]
+    # Defense-in-depth: forbidden list is checked BEFORE allow-list. Even if a future
+    # maintainer widens ALLOWED_TOP_LEVELS, contributor-only files cannot slip through.
+    if top_level in FORBIDDEN_TOP_LEVELS:
+        raise ValueError(
+            f"Refusing to install contributor-only path: {filename} "
+            f"(top-level '{top_level}' is in FORBIDDEN_TOP_LEVELS)"
+        )
     if top_level in ALLOWED_TOP_LEVEL_FILES and len(parts) != 1:
         raise ValueError(f"Unexpected archive path: {filename}")
     if top_level not in ALLOWED_TOP_LEVELS:

@@ -1,5 +1,33 @@
 # Repo Guide for Claude
 
+> **CONTRIBUTOR-ONLY FILE — DO NOT BUNDLE INTO THE INSTALLED SKILL.**
+>
+> This file lives at the **source repository root** of the nuclear-bug-fix
+> skill. It is read by Claude Code only when a contributor clones this repo
+> to work on the skill itself. It is NOT copied into the user's project
+> when the skill is installed via `install.sh` / `install.py` / `install.ps1`
+> — those install paths use an explicit allow-list (`ALLOWED_TOP_LEVELS`)
+> that does not include `CLAUDE.md`, and a defense-in-depth `FORBIDDEN_TOP_LEVELS`
+> list that explicitly blocks it.
+>
+> **Why this matters:** when a user installs the skill, a directory
+> `~/.claude/skills/nuclear-bug-fix/` (or `<project>/.claude/skills/nuclear-bug-fix/`)
+> is created. The user's project root may already have its OWN `CLAUDE.md`
+> with their project's instructions. If this file ever ended up in the
+> install package, it would either (a) sit unused inside the skill's
+> install directory wasting tokens on irrelevant authoring rules, or
+> (b) — if a future install path ever moved it to the project root —
+> collide with the user's own `CLAUDE.md`. Both outcomes are unacceptable.
+>
+> **If you are adding a file at the source-repo root, ask: should this be
+> contributor-only or should it ship with the skill?** Contributor-only =
+> add to `FORBIDDEN_TOP_LEVELS` in `scripts/install.py` and
+> `scripts/install.sh`, and add to `FORBIDDEN_EXACT_FILES` /
+> `FORBIDDEN_PREFIXES` in `scripts/build_skill.py`. Ship-with-skill = add
+> to the corresponding `ALLOWED_*` list. Never both.
+
+---
+
 This repo is the **nuclear-bug-fix** skill — a Claude Code skill for
 single-shot diagnosis and fix of bugs that survived code review and
 multiple fix attempts. The product is `SKILL.md` plus the pattern files

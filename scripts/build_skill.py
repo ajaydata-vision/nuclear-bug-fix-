@@ -24,11 +24,24 @@ ALLOWED_EXACT_FILES = (
     "setup",
     "setup.ps1",
 )
+# DO NOT add CLAUDE.md, docs/, or .claude/ to ALLOWED_ROOTS / ALLOWED_EXACT_FILES.
+# Those files are CONTRIBUTOR-ONLY (see CLAUDE.md and docs/reference-authoring-standards.md).
+# Bundling CLAUDE.md into the .skill artifact would land it inside
+# `.claude/skills/nuclear-bug-fix/` in every user's project, where it would either
+# (a) waste tokens on irrelevant authoring rules, or (b) collide with the user's own
+# project-root CLAUDE.md if a future install path ever moves it. The forbidden list
+# below is defense-in-depth — even if someone widens the allow-list by mistake, the
+# forbidden check still blocks them.
 FORBIDDEN_PREFIXES = (
     ".git/",
     ".github/",
+    ".claude/",
     "dist/",
+    "docs/",
     "evals/",
+)
+FORBIDDEN_EXACT_FILES = (
+    "CLAUDE.md",
 )
 VERSION_PATTERN = re.compile(r"(^\s{1,4}version:\s*).+$", re.MULTILINE)
 SOURCE_COMMIT_PATTERN = re.compile(r"(^\s{1,4}source_commit:\s*).+$", re.MULTILINE)
@@ -74,6 +87,8 @@ def is_allowed_path(rel_path: str) -> bool:
 
 
 def is_forbidden_path(rel_path: str) -> bool:
+    if rel_path in FORBIDDEN_EXACT_FILES:
+        return True
     if any(rel_path.startswith(prefix) for prefix in FORBIDDEN_PREFIXES):
         return True
     if rel_path == ".gitignore":
