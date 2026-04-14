@@ -1273,3 +1273,96 @@ state it as a confirmed known bug with source link.
 33. **Silent failure?** Find the swallow. Something is catching and dropping the error.
 34. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
 35. **Never revisit closed paths.** Already tried = dead path. Move on.
+
+---
+
+## FINAL OUTPUT GATE — SELF-CHECK BEFORE DELIVERING
+
+Before generating the response to the user, internally verify every item below.
+This is the LAST instruction you read before output. **Do NOT include this
+checklist in the response itself** — it is for you, not the user.
+
+Each item maps directly to a recurring benchmark deduction class. The gate
+exists because the most common reasons for a 90-vs-100 score gap are not
+diagnostic errors — they are structural omissions in the final response
+(missing BEFORE/AFTER, missing confidence label, missing sentinel log,
+unnamed pattern, vague Prove). A single-pass self-check catches these for
+free, without re-running the methodology.
+
+```
+[ ] 1. ROUTING NAMED. The reference file consulted (e.g. references/dotnet-patterns.md)
+       AND the specific pattern within it (e.g. "Pattern: Scoped DbContext captured by
+       singleton") are explicitly named in the response. Not "I checked the references"
+       — actual filename + heading. If no pattern matched, state "no pattern matched,
+       proceeding from first principles" instead. (Phase 2A pre-load — Rule 9.)
+
+[ ] 2. BUG CLASS STATED. The bug is classified as Bohrbug / Heisenbug / Mandelbug
+       / Schroedinbug. Drives strategy choice and is required by every benchmark
+       evaluator. (Phase 2D — Rule 4.)
+
+[ ] 3. PROVE SHOWS REAL EVIDENCE OR PRECISE EXPECTATIONS. Distinguish two cases:
+       (a) Evidence the user has already provided in intake (logs, command output,
+           code excerpts, screenshots) MUST be quoted verbatim in the Prove block.
+           Do not paraphrase what the user pasted.
+       (b) Evidence the user must collect by running the Prove command MUST be
+           described with the EXACT expected output to look for, not vague hints.
+           "Run X — if you see [exact string], confirmed; if you see [exact other
+           string], eliminated" is fine. "It would show an error" is NOT fine —
+           that's a guess dressed up as proof.
+       The forbidden pattern is claiming evidence as already-collected when it
+       was never run, OR predicting an output without specifying what to look for.
+       (Phase 3.8 — Rule 7.)
+
+[ ] 4. DDX GATE RAN. Either: (a) ≥2 competing hypotheses are named, each with the
+       specific evidence that eliminates it; OR (b) Phase 3.9 fast-path criteria
+       apply — direct unambiguous proof such that "a reasonable engineer reading
+       the log would have no alternative explanation" — and the response explicitly
+       names which fast-path criterion applies. A verdict without one of these is
+       a guess wearing a suit. (Rule 18.)
+
+[ ] 5. VERDICT IS ONE SENTENCE WITH CONFIDENCE. Root cause stated in a single
+       declarative sentence. Confidence label HIGH or MEDIUM is present. LOW
+       confidence means return to Phase 3 — do not deliver a LOW-confidence verdict.
+       (Rules 22, 19.)
+
+[ ] 6. BEFORE / AFTER BOTH PRESENT (or N/A explicitly named). The default is a
+       BEFORE block showing the broken line(s) verbatim AND an AFTER block showing
+       the corrected code. For purely additive fixes (a missing attribute, a missing
+       import, a missing config key, a missing migration step), the BEFORE block
+       may be "(no equivalent line existed in the original file)" — but the AFTER
+       block must still show the exact added lines and where they go. Never deliver
+       a fix as just prose. (Rule 24.)
+
+[ ] 7. SENTINEL LOG IN AFTER BLOCK (when the fix is executable code). If the AFTER
+       block contains code that runs at request/startup time, it MUST contain a
+       unique sentinel log line so the user can confirm at runtime that the fixed
+       code is actually running. For protocol stdout channels, the sentinel goes to
+       stderr or a file sink. EXEMPT cases (the sentinel is N/A, but item 8 must
+       compensate): config-only changes (appsettings.json, application.yml,
+       web.config, .csproj version bump), attribute-only changes ([Authorize],
+       [ApiController]), pure deletions, and infra-only changes (Dockerfile,
+       k8s manifests). For exempt cases, item 8's verification command MUST be
+       the runtime check that proves the new declarative state took effect.
+       (Rule 25.)
+
+[ ] 8. VERIFICATION IS CONCRETE. The response includes the exact command or action
+       to run, the exact expected output, and a regression test for the original
+       failure mode. Vague guidance like "test it" or "make sure it works" fails
+       this gate. For exempt fixes from item 7, this verification is the only proof
+       the fix took effect — make it especially explicit. (Phase 5.)
+
+[ ] 9. CLOSED PATHS NOT REVISITED. None of the things the user listed in Phase 1
+       §4 (CLOSED PATHS) appear as suggested actions in the response. If a closed
+       path is reopened, the new evidence that justifies reopening is named
+       explicitly. (Rule 35.)
+```
+
+**If any item fails: do NOT deliver the response.** Fix the gap inline (re-read
+the relevant phase or reference pattern), or escalate via Phase 6. The whole
+point of nuclear-bug-fix is that a single-shot answer is correct AND complete —
+the gate is what makes "complete" enforceable.
+
+The gate is cheap when the methodology was followed correctly: every item is
+already true, the check is a single internal pass, no rework needed. The cost
+only appears when the methodology was rushed — and in that case the cost is
+exactly what the gate exists to prevent.

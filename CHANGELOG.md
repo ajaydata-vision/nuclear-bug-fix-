@@ -2,6 +2,100 @@
 
 ## [Unreleased]
 
+## [1.21] - 2026-04-14
+
+### Final Output Gate (Pre-Delivery Self-Check)
+
+Adds a 9-item self-check block to `SKILL.md`, placed after `IRONCLAD RULES`
+as the last instruction the model reads before generating output. Each item
+maps to a recurring benchmark deduction class — the gate exists because the
+most common reasons for a 90-vs-100 score gap are not diagnostic errors,
+they are structural omissions in the final response (missing BEFORE/AFTER,
+missing confidence label, missing sentinel log, unnamed pattern, vague
+Prove block).
+
+This is the one structural pattern carried over from the MiniMax skills
+exploration earlier in the session — the rest of MiniMax's structural
+patterns did not transfer (they are content-generator patterns; nuclear-
+bug-fix is a search/reasoning skill where 100% of the value lives in
+pattern-reference content). The "Done Contract / Quality Gate" pattern is
+the exception because benchmark deductions are dominated by structural
+omissions, not diagnostic errors, and a final-pass checklist catches those
+for free.
+
+The 9 gate items:
+
+1. ROUTING NAMED — reference file + specific pattern heading must be cited
+   verbatim, not "I checked the references."
+2. BUG CLASS STATED — Bohrbug / Heisenbug / Mandelbug / Schroedinbug.
+   Required by every benchmark evaluator.
+3. PROVE SHOWS REAL EVIDENCE OR PRECISE EXPECTATIONS — split into two
+   sub-cases: (a) intake evidence quoted verbatim, (b) Prove-command
+   output predicted with exact expected strings + what each elimination
+   or confirmation looks like. Forbids "would show" without specificity.
+4. DDX GATE RAN — either ≥2 competing hypotheses with elimination
+   evidence each, OR Phase 3.9 fast-path criteria explicitly named.
+5. VERDICT IS ONE SENTENCE WITH CONFIDENCE — HIGH or MEDIUM only; LOW
+   means return to Phase 3, do not deliver.
+6. BEFORE / AFTER BOTH PRESENT — with explicit N/A handling for purely
+   additive fixes (missing attribute, missing import, missing config key)
+   so the gate does not false-fail on legitimate one-sided fixes.
+7. SENTINEL LOG IN AFTER BLOCK — with explicit EXEMPT cases for
+   config-only / attribute-only / pure-deletion / infra-only fixes,
+   where the sentinel is N/A but item 8's verification command must
+   compensate by including the runtime check that proves the new
+   declarative state took effect.
+8. VERIFICATION IS CONCRETE — exact command, exact expected output,
+   regression test for the original failure mode.
+9. CLOSED PATHS NOT REVISITED — items the user listed in Phase 1 §4 must
+   not appear as suggested actions, unless new evidence justifying
+   reopening is named explicitly.
+
+### Adversarial review of the gate (5 defects fixed before release)
+
+A self-adversarial pass on the v1 gate text caught and fixed:
+
+- D1 (🔴): Item 7 sentinel-log requirement was unconditional — would
+  false-fail on legitimate config-only / attribute-only / pure-deletion
+  fixes. Fixed by adding explicit EXEMPT cases.
+- D2 (🔴): Item 4 fast-path quote paraphrased "reading this" but Phase
+  3.9 line 814 says "reading the log" — model citation would mismatch
+  the actual rule. Fixed by aligning to the exact Phase 3.9 wording.
+- D5 (🟡): Item 3 forbade "would show" but legitimate Prove blocks DO
+  predict expected output for commands the user is about to run. Fixed
+  by splitting into intake-evidence and predicted-output sub-cases.
+- D6 (🟡): Item 6 BEFORE/AFTER would force fabricating a BEFORE for
+  purely additive fixes. Fixed by allowing "(no equivalent line existed)"
+  while still requiring AFTER content.
+- D7 (🟡): Closing pitch overstated cost as "zero" — internal walking
+  of 9 items isn't free. Softened to "cheap when methodology was
+  followed correctly."
+
+The gate then passed the rest of the post-flight checklist from
+`docs/reference-authoring-standards.md`: cross-references to Phase 1 §4,
+Phase 2A, Phase 2D, Phase 3.8, Phase 3.9, Phase 5, and IRONCLAD RULES
+(4, 7, 9, 18, 19, 22, 24, 25, 35) all verified correct against the actual
+SKILL.md line numbers.
+
+### Expected impact
+
+Estimated +1 to +2 on the 25-case eval mean, distributed across cases
+that currently lose 5–8 points each for a missing BEFORE/AFTER, missing
+sentinel log, missing confidence label, or vague Prove block. This is
+the smallest of the post-94.2 improvements but it is mechanically
+self-enforcing and applies to every future case automatically — including
+.NET cases (`DN-001..N`) once those are written.
+
+### File stats vs v1.20
+
+- `SKILL.md` — +83 lines (Final Output Gate block at the end of the file)
+- `VERSION` — `1.20` → `1.21`
+- `CHANGELOG.md` — this entry
+
+No changes to `references/`, `scripts/`, `dist/release.json` shape, or
+any contributor-only files. This is the smallest-scope release in many
+versions.
+
 ## [1.20] - 2026-04-14
 
 ### .NET Coverage + 9 Deduction-Killing Fixes + Authoring Standards + Build Hardening
