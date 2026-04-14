@@ -114,30 +114,47 @@ const linking = {
 
 ## CATEGORY 3 — FLATLIST & LIST PERFORMANCE
 
-### Pattern: FlatList re-renders every item on any state change — keyExtractor missing or wrong
-**Symptom:** List scrolling is janky. CPU spikes on any parent state update even if list data hasn't changed. Adding one item re-renders the entire list.
-**Why:** Without a stable `keyExtractor`, React Native uses array index as the key. On any parent re-render, React diffing by index cannot determine which items changed, re-renders all. Even with `keyExtractor`, if it returns a non-unique or unstable value (timestamp, Math.random()), diffing fails.
+### Pattern: FlatList re-renders every item on any state change — unstable renderItem AND missing keyExtractor (two-cause)
+**Symptom:** List scrolling is janky. CPU spikes on any parent state update **even when the state has nothing to do with the list data** (e.g. toggling an unrelated `filterOpen` boolean re-renders all 200 product items). Adding one item re-renders the entire list. Profiler shows N renders for N items on every parent state change.
+**Why (two compounding causes — fixing only one leaves the bug):**
+1. **Primary: unstable `renderItem` reference.** Writing `renderItem={({ item }) => <ProductCard product={item} />}` inline creates a brand-new arrow function on every parent render. FlatList's internal `PureComponent`-style shallow comparison sees a changed `renderItem` prop and re-renders every cell, regardless of whether the underlying data changed. This alone causes the symptom even if `keyExtractor` is correct.
+2. **Contributing: missing or unstable `keyExtractor`.** Without it, React falls back to array-index keys. Index-based diffing cannot detect stable item identity across re-renders, so React cannot bail out of any cell update — every re-render of a cell becomes a full reconciliation instead of a no-op. Combined with cause #1, the rendering cost compounds.
+3. **Common alternative explanation that is WRONG:** "the Zustand/Redux selector returns a new array reference on every store update." Test it by triggering a state change that doesn't touch the store at all (e.g. `setFilterOpen(true)`). If the list still re-renders, the selector is not the cause — `renderItem` instability is.
+
 **Prove:**
 ```javascript
-// Add to renderItem:
 const renderItem = ({ item }) => {
   console.log('[FLATLIST] rendering item id=', item.id);
-  return <MyItem item={item} />;
+  return <ProductCard product={item} />;
 };
-// Count log lines on a parent state update that shouldn't affect the list.
-// N logs for N items = all items re-rendering = keyExtractor problem.
+// Then trigger an unrelated state change (e.g. open a filter dropdown).
+// 200 log lines on a state change that did not touch products = unstable renderItem
+// confirmed. If you ALSO have no keyExtractor in the JSX, both causes are present.
 ```
-**Fix:**
+**Fix — apply ALL THREE. Any one alone is insufficient:**
 ```javascript
+// 1. Stable keyExtractor — pulled out of JSX so it does not realloc per render
+const keyExtractor = useCallback((item) => item.id.toString(), []);
+
+// 2. Memoized renderItem — stable reference across parent re-renders
+const renderItem = useCallback(
+  ({ item }) => <ProductCard product={item} />,
+  [], // empty deps because ProductCard receives item by prop, not via closure
+);
+
+// 3. React.memo on the cell component — bails out when the item prop is shallow-equal
+const ProductCard = React.memo(function ProductCard({ product }) {
+  return (/* ... */);
+});
+
+// Usage
 <FlatList
-  keyExtractor={(item) => item.id.toString()}  // stable, unique ID
+  data={products}
+  keyExtractor={keyExtractor}
   renderItem={renderItem}
-  // Also memoize renderItem:
 />
-const renderItem = useCallback(({ item }) => <MyItem item={item} />, []);
-// And memoize MyItem:
-const MyItem = React.memo(({ item }) => { ... });
 ```
+**Why all three:** `useCallback` on `renderItem` stops FlatList from invalidating cells on parent renders. `React.memo` on `ProductCard` makes each cell a no-op when its item prop is unchanged. `keyExtractor` lets React's reconciler match cells across renders by stable identity instead of by index. Remove any one and at least one re-render path stays open. **Do NOT** "solve" this by reducing item count, switching to `ScrollView`, or blaming the store selector — those are deflections.
 
 ### Pattern: FlatList scroll position jumps — getItemLayout not provided for variable height items
 **Symptom:** Programmatic scroll (`scrollToIndex`, `scrollToOffset`) jumps to wrong position. Or: scrolling near the end of the list causes visible position jump. Works with small lists, breaks with large ones.
@@ -176,20 +193,48 @@ getItemLayout={(data, index) => ({
 **Prove:** The error message names the exact unsupported property. No additional logging needed. Check every `Animated.Value` used with `useNativeDriver: true` — enumerate which style keys it drives.
 **Fix:** Separate animations: use `useNativeDriver: true` only for `transform` and `opacity`. Use `useNativeDriver: false` for layout properties. For performant layout animations: use Reanimated 2+ `useAnimatedStyle` with layout values, or `LayoutAnimation` for simpler cases.
 
-### Pattern: Reanimated 2 worklet crash — accessing JS-side variable from UI thread
-**Symptom:** App crashes with `[Reanimated] Tried to synchronously call a non-worklet function on the UI thread`. Or: silent crash/freeze when running animation. Works in development, crashes in production.
-**Why:** Reanimated 2 worklets run on the UI thread. They cannot access regular JS variables, hooks, or functions. Only worklet functions (decorated with `'worklet'` directive) and `SharedValue`s can be accessed from the UI thread.
-**Prove:**
+### Pattern: Reanimated 2/3 worklet crash — calling a JS function from the UI thread without runOnJS
+**Symptom:** App crashes with `[Reanimated] Tried to synchronously call a non-worklet function on the UI thread`. Crash location is inside a `useAnimatedGestureHandler` callback (`onActive`, `onEnd`, `onStart`) or inside `useAnimatedStyle`. **Works in development on JSC, crashes in production on Hermes** (Hermes runs worklets truly on the UI thread; JSC dev builds sometimes fall back to JS thread, masking the bug).
+**Why:** Reanimated 2/3 runs gesture-handler callbacks and `useAnimatedStyle` bodies as worklets on the UI thread. From the UI thread you can:
+- ✅ Read **primitive values** (numbers, strings, booleans) captured at worklet creation time — they are serialized into the worklet at definition time, so accessing `threshold` (a plain number prop) is **safe** with no extra wrapping.
+- ✅ Read and write `SharedValue`s via their `.value` accessor.
+- ✅ Call other worklet functions (functions with `'worklet'` directive at the top).
+- ❌ Synchronously invoke a regular JS function — including a callback prop like `onDismiss`. That triggers Reanimated's UI-thread guard and throws the "non-worklet function" error.
+
+**The most common shape of this bug** is a gesture handler that reads a primitive prop fine but then tries to call a JS callback directly:
 ```javascript
-// Add 'worklet' directive check — if a function is called from useAnimatedStyle
-// or useAnimatedGestureHandler, it must have 'worklet' at the top:
-const myStyle = useAnimatedStyle(() => {
-  'worklet'; // this is required
-  return { opacity: someSharedValue.value }; // SharedValue access is safe
-  // return { opacity: regularJsVar }; // THIS crashes — regular var, not shared
+// BROKEN — onDismiss is a plain JS callback prop, called directly from a worklet
+const gestureHandler = useAnimatedGestureHandler({
+  onActive: (event) => {
+    if (event.translationY > threshold) {  // ← threshold is a number prop: SAFE
+      onDismiss();                          // ← onDismiss is a JS function: CRASH
+    }
+  },
 });
 ```
-**Fix:** Convert all functions called from worklets to worklets by adding `'worklet'` directive. Replace JS variable references with `SharedValue`s (created via `useSharedValue`). Use `runOnJS(myJsFunction)(args)` explicitly when you must call JS from UI thread.
+**Prove:** The error message `Tried to synchronously call a non-worklet function on the UI thread` is pathognomonic — Reanimated's runtime guard, not gesture-handler's. The crash stack points at the exact callback line. Confirm by checking which identifier is the function call vs which is the value read; the function call is the culprit.
+
+**Fix — wrap the JS call with `runOnJS`. Do NOT touch the primitive:**
+```javascript
+import { runOnJS } from 'react-native-reanimated';
+
+const gestureHandler = useAnimatedGestureHandler({
+  onActive: (event) => {
+    if (event.translationY > threshold) { // threshold stays a plain number prop — no SharedValue needed
+      runOnJS(onDismiss)();                 // marshal the JS call back to the JS thread
+    }
+  },
+});
+```
+
+**Critical: do NOT also convert `threshold` to a `SharedValue`.** Primitive props captured by worklet closures are already safe — Reanimated serializes them at worklet definition. Converting them to a `useSharedValue` adds churn, breaks declarative re-render-on-prop-change, and is exactly the over-fix that loses points on review. The only thing that needed wrapping was the function call.
+
+**Other shapes of the same bug** (still fix with `runOnJS`, not by converting primitives):
+- Calling `setState` / a Zustand setter from `onActive`: `runOnJS(setIsOpen)(true)`.
+- Calling a navigation function: `runOnJS(navigation.goBack)()`.
+- Logging via a JS-side analytics SDK: `runOnJS(analytics.track)('swiped')`.
+
+For the separate "I am reading a regular JS variable inside `useAnimatedStyle`" case (no function call involved), the fix IS to convert that JS variable to a `SharedValue` via `useSharedValue` — but that is a different pattern from the function-call crash above. Diagnose by asking: "is the offending line a *value read* or a *function call*?" Value read → `SharedValue`. Function call → `runOnJS`.
 
 ### Pattern: Animated loop memory leak — cleanup missing in useEffect
 **Symptom:** App runs fine initially. Over time (after several screen navigations or re-mounts), memory usage grows. Animation-heavy screens show increasing memory after repeated visits.

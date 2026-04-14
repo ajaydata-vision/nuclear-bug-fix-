@@ -679,22 +679,51 @@ public class AsyncConfig implements AsyncConfigurer {
 **Fix:** Add `@EnableScheduling` to any `@Configuration` class. For Spring Boot apps, adding it to the main `@SpringBootApplication` class is sufficient.
 
 ### Pattern: @Cacheable returns stale data — cache not invalidated after write
-**Symptom:** Update operation succeeds (DB shows new value). Subsequent read returns old value. Restarting app returns correct value. Only one specific endpoint is stale.
-**Why:** `@Cacheable` stores the return value keyed by method arguments. `@CacheEvict` on the write method must use the SAME cache name and SAME key expression. Mismatch → write evicts a different key, read continues hitting the stale cached entry.
+**Symptom:** Update operation succeeds (DB shows new value). Subsequent read returns old value. Restarting app returns correct value. Only one specific endpoint is stale. The eviction log line *does* fire — but `redis-cli KEYS users::*` shows the original key still present after the eviction "succeeded."
+**Why:** `@Cacheable` stores the return value keyed by the SpEL-resolved method arguments. `@CacheEvict` on the write method must use the SAME cache name AND a SpEL expression that resolves to the SAME key object — including its **Java type**. Spring Cache uses `SimpleKeyGenerator` (or your serializer) to compute the cache key from the resolved object, and **`Long(42)` and `Integer(42)` are different objects**: `new Long(42).equals(new Integer(42)) == false`, and most Redis serializers (`GenericJackson2JsonRedisSerializer`, `JdkSerializationRedisSerializer`) embed the type in the serialized form. The eviction targets a key that was never stored, leaves the original entry intact, and reports success because evicting a non-existent key is a no-op, not an error.
+
+**The Long/Integer trap (most common cause of "evict ran but cache is still stale"):**
+```java
+// Stored with a Long key — the controller passes Long userId
+@Cacheable(value = "users", key = "#userId")
+public User getUser(Long userId) { ... }   // key object: Long(42)
+
+// Evicted with #user.id — but UserProfile.getId() returns Integer!
+@CacheEvict(value = "users", key = "#user.id")
+public void updateUser(UserProfile user) { ... }  // key object: Integer(42)
+```
+Both `toString()` to `"42"`, both look identical in logs, but the cache key bytes differ. The evict targets `Integer(42)`, which was never written. The original `Long(42)` entry survives. **This pattern survives code review because both call sites "look right."** The only way to spot it is to check the actual return type of every getter referenced in a `@CacheEvict` SpEL path against the parameter type used in the matching `@Cacheable`.
+
+**Other key-mismatch variants to check at the same time:**
+- Cache name mismatch: `value = "users"` vs `value = "user"`.
+- SpEL path mismatch: `key = "#userId"` vs `key = "#user.id"` even when types agree (different objects → different `hashCode`/`equals` via `SimpleKeyGenerator`).
+- Auto-key vs explicit key: `@Cacheable` with no `key` (auto-generated from all args) vs `@CacheEvict` with an explicit `key`.
+- Composite vs scalar: `@Cacheable(key = "{#tenantId, #userId}")` vs `@CacheEvict(key = "#userId")`.
+
 **Prove:**
 ```java
-// Add to the @Cacheable method — log what key is actually being used
-@Cacheable(value = "users", key = "#id")
-public User getUser(Long id) {
-    log.debug("[CACHE] MISS — loading from DB, key={}", id);
-    return repo.findById(id).orElseThrow();
+@Cacheable(value = "users", key = "#userId")
+public User getUser(Long userId) {
+    log.debug("[CACHE] MISS — loading user {} from DB (type={})",
+        userId, userId.getClass().getSimpleName());
+    return repo.findById(userId).orElseThrow();
 }
-// If log never appears after first call → cache is hitting. 
-// After an update, if log still never appears → eviction is not working.
-// Also: log.debug("[CACHE] evicting key={}", id) in the @CacheEvict method.
-// If evict log appears but get log does NOT appear next call → different key in use.
+
+@CacheEvict(value = "users", key = "#user.id")
+public void updateUser(UserProfile user) {
+    Object id = user.getId();
+    log.debug("[CACHE] evicting user {} (type={})", id, id.getClass().getSimpleName());
+    repo.save(user);
+}
 ```
-**Fix:** Ensure `value` (cache name) and `key` SpEL expression are identical between `@Cacheable` and `@CacheEvict`. Use `@CacheConfig(cacheNames="users")` at class level to avoid mismatch.
+After one GET + one UPDATE, look at the two log lines side-by-side: `loading user 42 (type=Long)` then `evicting user 42 (type=Integer)`. Same number, different type ⇒ confirmed key-type mismatch. Then `redis-cli KEYS 'users::*'` will still show the original key — final proof.
+
+**Fix:** Align the key expressions so both resolve to the **same SpEL path AND the same Java type**. Pick one:
+- **Option A (preferred):** Change `UserProfile.getId()` to return `Long` to match the `Long userId` parameter in the read path. Also update any controller signature that passes `user.getId()` downstream so the type stays `Long` end-to-end.
+- **Option B:** Add a dedicated `@CacheEvict(value = "users", key = "#userId") public void evictUser(Long userId)` and call it from `updateUser` with `evictUser(user.getId().longValue())`.
+- **Option C:** Use `@CacheConfig(cacheNames = "users")` at class level and ensure every `key` SpEL expression on the class resolves to the exact same object type.
+
+Do NOT use `allEntries = true` as the fix — it works but evicts every user on every update, defeating the cache. Do NOT switch to `@CachePut` without also fixing the underlying type mismatch — `@CachePut` only helps if its key matches `@Cacheable`'s key, which is exactly the bug.
 
 ### Pattern: @PreAuthorize expression fails silently — SpEL error returns 403 not 500
 **Symptom:** Endpoint returns 403 Forbidden for a user who should have access. No exception logged. Security debug shows access denied but no reason.
@@ -742,22 +771,66 @@ kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 # Also log inside @KafkaListener: log.debug("[KAFKA] received topic={} partition={} offset={}", r.topic(), r.partition(), r.offset())
 # If this never prints → listener not reached
 ```
-**Fix:** For a new consumer group that must read from the beginning: set `auto.offset.reset=earliest`. For production: never use `latest` on a new consumer group without explicit offset management. Set `group.id` explicitly in `application.yml` — never rely on default.
+**Fix:** Two steps — `auto.offset.reset=earliest` alone is NOT enough once the group already has committed offsets at log-end (the reset policy only applies when no offset exists). You must also rewind the existing offsets, and `kafka-consumer-groups.sh --reset-offsets` REFUSES to run while the group has live members.
 
-### Pattern: Kafka consumer group rebalance storm — listener processing slower than session timeout
-**Symptom:** Consumer processes some messages then stops. Logs show repeated `Revoked partitions` / `Assigned partitions` cycles. Messages processed multiple times (duplicate processing). Lag grows despite consumer running.
-**Why:** Kafka's consumer coordinator requires a heartbeat within `session.timeout.ms` (default **45 seconds** in Kafka 3.0+, was 10s pre-3.0). If message processing takes longer than this, the coordinator declares the consumer dead, triggers rebalance, reassigns partitions, and another consumer picks up from last committed offset. That consumer also times out. Loop.
-**Prove:** Log the processing time of every message: `long start = System.currentTimeMillis(); process(record); log.debug("[KAFKA] processed in {}ms", System.currentTimeMillis()-start)`. If any message exceeds `session.timeout.ms` → rebalance trigger confirmed. Also check `max.poll.interval.ms` (default 5 minutes) — exceeded when batch too large.
-**Fix:**
 ```yaml
+# 1. application.yml — change the default for any FUTURE new group
 spring.kafka.consumer:
-  max-poll-records: 10          # reduce batch size
-  properties:
-    max.poll.interval.ms: 300000  # increase if processing is legitimately long
-    session.timeout.ms: 30000
-    heartbeat.interval.ms: 10000
+  auto-offset-reset: earliest
+  group-id: order-processor-v1
 ```
-For long processing: commit offset after each record, not after the batch. Use `AckMode.RECORD` in `ContainerProperties`.
+
+```bash
+# 2. STOP the consumer application FIRST (scale to 0, kill the pod, etc.)
+#    Otherwise the next command fails with "Assignments can only be reset
+#    if the group <id> is inactive".
+kubectl scale deployment order-processor --replicas=0
+# (or: docker stop, systemctl stop, etc.)
+
+# 3. Rewind committed offsets to the beginning of the topic
+kafka-consumer-groups.sh --bootstrap-server kafka:9092 \
+  --group order-processor-v1 \
+  --topic orders \
+  --reset-offsets --to-earliest --execute
+
+# 4. Restart the consumer — it will replay all historical messages
+kubectl scale deployment order-processor --replicas=1
+```
+
+For production: never use `latest` on a new consumer group without explicit offset management. Set `group.id` explicitly in `application.yml` — never rely on default. For groups that must read historical data, configure `earliest` BEFORE the group's first connection so this rescue procedure is never needed.
+
+### Pattern: Kafka consumer group rebalance storm — listener processing slower than max.poll.interval.ms
+**Symptom:** Consumer processes some messages then stops. Logs show repeated `Revoked partitions` / `Assigned partitions` cycles. Messages processed multiple times (duplicate processing — *the same message key appears twice after a Revoked/Assigned cycle, with the duplicates already persisted to the database*). Lag grows despite consumer running.
+**Why (read carefully — two timeouts, two different causes):**
+- `session.timeout.ms` is heartbeat-based. Heartbeats run on a **separate background thread**, so they keep firing even while a `@KafkaListener` method is busy. A long-running listener does **NOT** trip session timeout on its own.
+- `max.poll.interval.ms` is the limit between `poll()` calls *on the consumer thread itself*. Spring Kafka's listener container only calls `poll()` after the previous batch has finished processing. **If processing one batch takes longer than `max.poll.interval.ms`, the coordinator evicts the consumer**, triggers rebalance, and reassigns the partition. The unacknowledged messages are replayed by the new owner — duplicate processing.
+- The diagnostic equation is: `processing_time_per_message × max-poll-records  >  max.poll.interval.ms` ⇒ guaranteed rebalance storm. Example: 47 s/msg × 1 batch = 47 s > 30 s `max.poll.interval.ms` ⇒ storm on every message.
+**Prove:** Log the processing time of every message: `long start = System.currentTimeMillis(); process(record); log.debug("[KAFKA] processed in {}ms", System.currentTimeMillis()-start)`. Compare against `max.poll.interval.ms` from `application.yml` (NOT `session.timeout.ms`). The trigger is processing-time vs poll-interval, not heartbeat. Confirm in logs that the rebalance fires *after* the slow processing window completes — that timing correlation rules out the "network glitch" alternative.
+**Fix:** Pick ONE knob to fix the rebalance, AND add idempotency to clean up duplicates already in the database. **Both are required** — fixing the rebalance only stops *future* duplicates; the existing dupes are already written.
+```yaml
+# application.yml — pick whichever matches your processing characteristics
+spring.kafka.consumer:
+  max-poll-records: 1               # process one slow message at a time (simplest)
+  properties:
+    max.poll.interval.ms: 600000    # OR: raise the ceiling above worst-case processing time
+spring.kafka.listener:
+  ack-mode: record                  # OR: commit after each record so a rebalance loses at most one
+```
+```java
+// Idempotency — required regardless of which knob above you pick.
+// Even with the rebalance fixed, retries on transient failures will redeliver.
+@KafkaListener(topics = "payments")
+public void handle(PaymentEvent event) {
+    // Use a unique business key — eventId, idempotency-key header, or (orderId+amount+ts)
+    if (processedRepo.existsByEventId(event.getEventId())) {
+        log.info("[KAFKA] duplicate eventId={} skipped", event.getEventId());
+        return;
+    }
+    paymentService.charge(event);              // your existing logic
+    processedRepo.save(new Processed(event.getEventId())); // mark as done
+}
+```
+For long processing: commit offset after each record, not after the batch (`AckMode.RECORD`). Do NOT add a try/catch around the listener method — that catches business exceptions, not the rebalance, and hides the real failure. Do NOT increase consumer thread count — it does not change the per-message processing time vs the poll-interval ceiling.
 
 ### Pattern: Kafka message silently not produced — transaction not committed
 **Symptom:** Producer code executes with no exception. Messages appear in local log. Consumer never receives them. `kafka-console-consumer` also shows nothing.
@@ -776,28 +849,54 @@ kafkaTemplate.send(topic, key, value)
 Also: on a **non-production** diagnostic consumer only, temporarily set `isolation.level=read_uncommitted` to confirm uncommitted messages are present in the topic. Never change isolation on a production consumer — it exposes dirty reads from all producers on the broker.
 **Fix:** Ensure `kafkaTemplate.send()` result is awaited or callback is checked. For transactional producers: annotate the method with `@Transactional` and ensure no exception exits before the method returns normally.
 
-### Pattern: @KafkaListener deserializaton error — poison pill stops entire partition
-**Symptom:** Consumer processes messages normally then permanently stops on one partition. Error log shows `SerializationException` or `JsonParseException`. All subsequent messages in that partition are skipped. No more processing from that partition.
-**Why:** A malformed message (wrong schema, wrong type, corrupted bytes) causes deserialization to throw on every poll attempt. Kafka retries the same offset indefinitely. The partition is permanently blocked — a "poison pill."
-**Prove:** Log the raw bytes of the failing message: enable `ErrorHandlingDeserializer` which catches the exception and delivers a `DeserializationException` header with the raw bytes. Check the consumer lag for that specific partition — if it stops moving while others advance, the partition is blocked.
-**Fix:**
-```java
-// application.yml — use ErrorHandlingDeserializer to prevent poison pill blocking
-spring.kafka.consumer.value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
-spring.kafka.consumer.properties.spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+### Pattern: @KafkaListener deserialization error — poison pill stops entire partition
+**Symptom:** Consumer processes messages normally then permanently stops on one partition. Error log shows `SerializationException` or `JsonParseException` and *the same offset and partition repeating identically* — e.g. `Seeking to current position for [notifications-1@offset 94821]` over and over. Other partitions on the same topic continue advancing. Adding a try/catch inside the `@KafkaListener` method does NOT help.
+**Why:** A malformed message (wrong schema, wrong type, corrupted bytes) causes the value deserializer to throw on every poll attempt. The exception is raised in the converter layer **before** the `@KafkaListener` method is invoked, so an in-method try/catch can never see it. Kafka's at-least-once semantics retry the same offset until it succeeds or the offset is explicitly advanced. Result: that one offset blocks its entire partition forever — a "poison pill." Other partitions are unaffected, which is how you tell this apart from a deadlock or a downstream service outage.
+**Prove:** Tail the consumer log and look for an offset that repeats *identically* across retries (`@offset 94821` printed every few seconds). Confirm partitions 0 and 2 are still advancing while partition 1 is stuck. Then enable `ErrorHandlingDeserializer` (see fix) which captures the raw bytes in a header so you can inspect what is malformed.
+**Fix:** Two steps, **both required for one-shot recovery**. Step 1 unblocks the partition right now; Step 2 prevents it from happening again. Skipping Step 1 leaves production stuck even after the code fix is deployed.
 
-// In listener — check for deserialization error header
-@KafkaListener(topics = "my-topic")
+**Step 1 — IMMEDIATE recovery: manually advance past the poison offset.**
+```bash
+# Stop the consumer first (reset-offsets refuses to run on an active group)
+kubectl scale deployment notification-consumer --replicas=0
+
+# Skip the single poisoned offset (94821 → 94822)
+kafka-consumer-groups.sh --bootstrap-server kafka:9092 \
+  --group notification-consumer-v1 \
+  --topic notifications --partition 1 \
+  --reset-offsets --to-offset 94822 --execute
+
+# Restart the consumer — partition 1 unblocks
+kubectl scale deployment notification-consumer --replicas=1
+```
+
+**Step 2 — PERMANENT fix: install `ErrorHandlingDeserializer` + DLQ routing** so the next poison pill is captured and routed instead of blocking the partition.
+```yaml
+# application.yml
+spring.kafka.consumer:
+  value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+  properties:
+    spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+```
+```java
+// Listener — check for the deserialization error header and route to DLQ
+import org.springframework.kafka.support.serializer.SerializationUtils;
+import org.apache.kafka.common.header.Header;
+
+@KafkaListener(topics = "notifications")
 public void listen(ConsumerRecord<String, Object> record) {
-    Header errorHeader = record.headers().lastHeader(SerializationUtils.DESERIALIZER_EXCEPTION_HEADER);
+    Header errorHeader = record.headers()
+        .lastHeader(SerializationUtils.VALUE_DESERIALIZER_EXCEPTION_HEADER);
     if (errorHeader != null) {
-        log.error("[KAFKA] poison pill at offset={}, sending to DLQ", record.offset());
-        dlqTemplate.send("my-topic.DLQ", record.key(), record.value());
-        return;
+        log.error("[KAFKA] poison pill at partition={} offset={} → DLQ",
+            record.partition(), record.offset());
+        dlqTemplate.send("notifications.DLQ", record.key(), record.value());
+        return; // ack normally so the partition advances
     }
-    process((MyEvent) record.value());
+    process((NotificationEvent) record.value());
 }
 ```
+**Do NOT:** add try/catch *inside* the listener method as the primary fix (deserialization happens before the method is called — the catch never fires). Do NOT just restart the consumer — the same offset will be re-attempted and re-fail. Do NOT blame the producer without also fixing the consumer side; producers can always misbehave and the consumer must survive it.
 
 ---
 

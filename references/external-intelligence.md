@@ -391,7 +391,20 @@ This pattern bypasses the normal external search triggers (no error message, no 
 ```
 
 **Common ORM breaking change patterns by library:**
-- **Mongoose 6→7:** `sanitizeFilter` changes affect how null values are treated in updates. `findByIdAndUpdate({ field: null })` may be silently dropped. Use explicit `{ $set: { field: null } }`.
+- **Mongoose 6→7 — null updates silently dropped (most common silent data loss):**
+  Mongoose 7 changed how shorthand update objects are translated. `findByIdAndUpdate(id, { field: null })` and `updateOne({_id}, { field: null })` may be silently rewritten so the `null` is dropped — the field keeps its old value, no error, no warning. This is most visible when the schema declares `default: null` on the field.
+  - **Symptom:** field set to `null` does NOT persist after Mongoose 6→7 upgrade; non-null updates on the same field still work; no error thrown.
+  - **Root cause:** Mongoose 7's stricter `sanitizeFilter` / cast pipeline treats bare `null` differently from v6 in shorthand update form. The behavior change was not prominently called out in the migration guide — this is a known regression confirmed in the Mongoose 7 changelog and GitHub issues.
+  - **Fix (use explicit `$set`):**
+    ```js
+    // BROKEN in Mongoose 7 — null silently dropped
+    await Model.findByIdAndUpdate(id, { optionalNote: null })
+
+    // FIXED — explicit $set forces the null write
+    await Model.findByIdAndUpdate(id, { $set: { optionalNote: null } })
+    ```
+  - **Do NOT:** store empty string instead of `null`, add application-level null guards, or blame MongoDB — MongoDB accepts `null` fine; Mongoose is dropping it before the wire.
+  - **Search:** `mongoose 7 null update not persisted site:github.com/Automattic/mongoose/issues`
 - **Sequelize 5→6:** `returning` option behavior changed. Raw queries may differ.
 - **Prisma 4→5:** `null` vs `undefined` distinction in updates — `undefined` means "don't update", `null` means "set to null". Swapping them produces silent no-ops.
 - **TypeORM 0.2→0.3:** `update()` behavior for partial updates changed.

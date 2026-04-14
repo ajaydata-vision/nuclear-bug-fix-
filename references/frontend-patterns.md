@@ -159,10 +159,18 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Fix:** Always set `isLoading = false` in `finally` block, not just in `try` and `catch`.
 
 ### Pattern: Optimistic UI desyncs from server under rapid mutations or slow network
-**Symptom:** Counter or UI state flashes wrong values briefly before correcting. Only on slow connections or when the same action fires rapidly. The value shown is never consistent with either the old or new server state.
-**Why:** Each mutation applies an independent optimistic delta to local state. Multiple in-flight mutations read the same stale base value, each incrementing from it. When responses arrive out of order, deltas stack incorrectly against a base that has already changed.
-**Prove:** Throttle to 3G in DevTools. Trigger the mutation 3–4 times rapidly. Watch the counter — it will flash values that are neither the old nor the correct new value.
-**Fix:** Use all three TanStack Query mutation handlers together. Missing any one breaks the contract:
+**Symptom:** Counter or UI state flashes wrong values briefly before correcting. Only on slow connections or when the same action fires rapidly. The value shown is never consistent with either the old or new server state. Self-corrects after a delay — which is the diagnostic signal that the *server* is authoritative and the *client* optimistic state is the bug.
+**Why:** Multiple optimistic mutations are in-flight simultaneously. Each mutation independently snapshots cache state, applies its own delta, and on success overwrites the cache with whatever it computed locally. When responses arrive out of order:
+1. Click A snapshots `likes=5`, optimistically writes `6`, sends request.
+2. Click B snapshots `likes=6`, optimistically writes `7`, sends request.
+3. B's response arrives first → server returns `6` → handler overwrites cache with `6`, erasing A's effect.
+4. A's response arrives → server returns `7` → cache flips back to `7`.
+The visible flash is real desync, not a render glitch. **Debouncing the button does NOT fix this** — slow networks reproduce the same race with one click and a navigation.
+**Prove:** Throttle to 3G in DevTools. Trigger the mutation 3–4 times rapidly. Watch the counter — it will flash values that are neither the old nor the correct new value. Also: log every mutation's `onMutate`, `onSuccess`, `onSettled` with a request ID — the interleaving of IDs across the three callbacks is the smoking gun.
+**Fix:** Use all three TanStack Query mutation handlers together. **Each handler covers a distinct race window. Missing any one breaks the contract:**
+- `onMutate` → **cancel in-flight refetches** (otherwise a stale GET response arriving mid-mutation overwrites the optimistic value) AND **snapshot the previous cache value** (the only way to roll back on error).
+- `onError` → **roll back to the snapshot** (otherwise a failed mutation leaves the optimistic delta in place forever).
+- `onSettled` → **invalidate and refetch** the query unconditionally, success or failure (this is what eliminates accumulated desync from out-of-order responses — the server becomes the single source of truth after every mutation, so no amount of interleaving can leave the cache wrong).
 ```js
 // Define queryKey as a constant matching the key used in useQuery
 const POST_QUERY_KEY = ['post', postId]
@@ -626,30 +634,54 @@ const user = getUser()!; // only if getUser() is guaranteed non-null in this cod
 Rule: treat every `as` and `!` as a potential runtime crash site. Add a comment explaining WHY the assertion is safe.
 
 ### Pattern: Dynamic import() chunk missing after deploy — 404 on lazy-loaded route
-**Symptom:** App works. New version deployed. Some users (those with the app already open) get a blank page or error when navigating to a specific route. Error: `Failed to load resource: net::ERR_ABORTED 404`. Refreshing the page fixes it.
-**Why:** Code-split bundles use content-hashed filenames (`chunk.abc123.js`). When a new version deploys, old chunk names are gone. Users with the old HTML in memory try to `import()` the old chunk URL — 404. Only users who loaded the app before the deploy are affected.
-**Prove:** Open Network tab during the error. Find the failing request — it will be a `.js` chunk with a hash in the name. Compare the hash in the URL to what exists on the server. If the file doesn't exist → stale chunk reference from old HTML.
-**Fix:**
-```javascript
-// Catch chunk load failures and force ONE reload — guarded against infinite loops:
-router.onError((error) => {
-  const isChunkError =
-    error.message.includes('Failed to fetch dynamically imported module') ||
-    error.message.includes('Importing a module script failed');
-  if (!isChunkError) return;
+**Symptom:** App works. New version deployed. Some users (those with the app already open) get a blank page or error when navigating to a lazy-loaded route. Error: `Failed to load resource: net::ERR_ABORTED 404` for a `.js` chunk URL. New visitors are unaffected. Hard refresh fixes it for the affected user.
+**Why:** Bundlers (Vite, webpack, Rollup) emit code-split chunks with content-hashed filenames (`chunk.Bq7mKpRx.js`). On deploy, old hashed files are replaced with new ones (`chunk.Cx9nLwTy.js`). A user who loaded the app *before* the deploy still has the old HTML in memory referencing the old hash. The next `React.lazy()` / dynamic `import()` triggered by navigation fetches the old URL — 404. `<Suspense>` has no `fallback` for module load errors, so the route renders blank. Only pre-deploy users are affected, which is exactly why the alternative explanation "the CDN is broken" is wrong: new visitors work fine.
+**Prove:** Open Network tab during the failure. The failing request is a `.js` chunk with a hash in the name. Compare to what's on the CDN — old hash gone, new hash present. Only pre-deploy sessions reproduce; an incognito window works.
+**Fix:** Two parts. **Both are needed for a complete one-shot fix.**
 
-  // Guard: only reload once per session — avoids infinite loop if CDN is down
-  const reloaded = sessionStorage.getItem('chunk_reload_attempted');
-  if (reloaded) {
-    console.error('[CHUNK] Reload did not fix chunk error — CDN may be down');
-    return; // show error UI instead of looping
+**(1) Client — React Router 6 `errorElement` catches the chunk load failure and forces ONE guarded reload:**
+```jsx
+// router.tsx — React Router 6 / 6.4+ data router
+import { createBrowserRouter, useRouteError } from 'react-router-dom';
+
+function ChunkErrorBoundary() {
+  const error = useRouteError() as Error;
+  const isChunkError =
+    /Failed to fetch dynamically imported module/.test(error?.message ?? '') ||
+    /Importing a module script failed/.test(error?.message ?? '') ||
+    /ChunkLoadError/.test(error?.name ?? '');
+
+  if (!isChunkError) {
+    return <GenericErrorUI error={error} />;
+  }
+
+  // Guard: only reload ONCE per session — prevents infinite reload loop if CDN is actually down
+  const alreadyReloaded = sessionStorage.getItem('chunk_reload_attempted');
+  if (alreadyReloaded) {
+    console.error('[CHUNK] reload did not fix chunk error — CDN may be down');
+    return <GenericErrorUI error={error} />;
   }
   sessionStorage.setItem('chunk_reload_attempted', '1');
-  window.location.reload(); // reloads fresh HTML with new chunk references
-});
-// Clear the guard on successful navigation:
-router.afterEach(() => sessionStorage.removeItem('chunk_reload_attempted'));
+  window.location.reload(); // fetches fresh HTML referencing the NEW chunk hashes
+  return null;
+}
 
-// Server strategy: serve new HTML immediately on deploy,
-// keep old chunk files on CDN for 1-2 hours to serve users still on old HTML
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Layout />,
+    errorElement: <ChunkErrorBoundary />, // catches lazy() module load failures
+    children: [
+      { path: 'settings', element: <SettingsLazy /> }, // React.lazy(() => import('./Settings'))
+    ],
+  },
+]);
+
+// Clear the guard once the user successfully navigates after reload — so a *future*
+// chunk error in the same session can also self-heal:
+window.addEventListener('load', () => sessionStorage.removeItem('chunk_reload_attempted'));
 ```
+
+**(2) Server / CDN — keep old chunks alive for 1–2 hours after deploy** so in-flight users finish their session without ever hitting a 404. Configure your deploy pipeline to *add* new hashed files rather than *replace* the directory, and run a janitor that prunes files older than ~2 hours. This converts the chunk-404 from a hard error into a non-event for almost all users; the `errorElement` reload is the safety net for the rest.
+
+**Do NOT:** disable content hashing (breaks long-term CDN caching), wrap `<Suspense>` in a plain `ErrorBoundary` without auto-reload (user has to manually refresh), or increase CDN TTL (wrong direction — the problem is files being *deleted*, not over-cached).
