@@ -68,13 +68,17 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 ```
-For the "401 has no CORS headers" case: add `app.UseStatusCodePages()` early, or use a custom exception handler that manually writes CORS headers on error responses. Also: `AllowCredentials()` cannot be combined with `AllowAnyOrigin()` — the browser will reject the response even if the server sends both.
+For the "401 has no CORS headers" case specifically: if `UseCors` is already in the right position (after `UseRouting`, before `UseAuthentication`), the CORS middleware runs on the outbound pass of the 401 response and DOES add the headers. If the 401 still has no CORS headers, it means `UseCors` is either missing, or registered AFTER `UseAuthentication`/`UseAuthorization` (so it never sees the 401 on the way out), or the 401 is being written by a custom exception handler earlier in the pipeline. Fix the ordering — don't try to patch it with `UseStatusCodePages`, which does not add CORS headers. Also: `AllowCredentials()` cannot be combined with `AllowAnyOrigin()` — the browser will reject the response even if the server sends both.
 
 ### Pattern: Custom middleware runs twice per request — you registered it twice
 **Symptom:** A request ID is being generated twice per request, or logging middleware prints each log line twice, or a rate limit counter increments by 2 on every request. Only happens after a refactor.
-**Why:** Middleware was registered both via `app.Use<MyMiddleware>()` and via `app.UseMiddleware<MyMiddleware>()`, or registered once in `Program.cs` and again inside a `UseWhen`/`Map` branch that actually matches every request. The pipeline is a linear list — duplicate registrations produce duplicate invocations.
-**Prove:** Add a `Console.WriteLine` with a GUID at the start of the middleware's `InvokeAsync`. Hit one endpoint. Count how many GUIDs print per request. More than 1 = duplicate registration.
-**Fix:** Search `Program.cs` for every occurrence of the middleware type name. Remove the duplicate. If the middleware needs to run conditionally, use `UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/api"), branch => branch.UseMiddleware<...>())` — but never register it both globally and inside a `UseWhen`.
+**Why:** Middleware was registered more than once in the pipeline. The most common shapes are:
+1. `app.UseMiddleware<MyMiddleware>()` called in `Program.cs` AND inside an extension method that was itself added to `Program.cs` (e.g. `app.UseMyModule()` that internally also calls `UseMiddleware<MyMiddleware>()`).
+2. Registered once globally AND again inside a `UseWhen`/`Map` branch whose predicate matches every request.
+3. Registered in both a base `Startup`-style class and in `Program.cs` during a minimal hosting migration.
+The pipeline is a linear list — duplicate registrations produce duplicate invocations. Also note: calling `app.UseRouting()` more than once creates two separate routing middlewares in the pipeline and the second one can silently reset endpoint selection — keep `UseRouting` at exactly one call site.
+**Prove:** Add a `Console.WriteLine` with a GUID at the start of the middleware's `InvokeAsync`. Hit one endpoint. Count how many GUIDs print per request. More than 1 = duplicate registration. Also dump the pipeline at startup by logging each middleware registration call site.
+**Fix:** Search `Program.cs` AND every `Use*` extension method in the codebase for every occurrence of the middleware type name. Remove the duplicate — don't "gate" it with a flag, just remove the extra registration. If the middleware needs to run conditionally, use `UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/api"), branch => branch.UseMiddleware<MyMiddleware>())` — but never register it both globally and inside a `UseWhen`.
 
 ---
 
@@ -84,7 +88,7 @@ For the "401 has no CORS headers" case: add `app.UseStatusCodePages()` early, or
 **Symptom:** POST/PUT endpoint receives the request, `Request.Body` contains valid JSON (confirmed by manually reading the stream), but the `[FromBody] MyDto dto` parameter is `null` inside the action. No model binding error surfaced to the client — just a null object. Only affects one endpoint; others bind fine.
 **Why:** Several root causes produce identical symptoms — rule them out in order:
 1. **Content-Type header is missing or wrong.** `[FromBody]` only binds when `Content-Type: application/json` (or `text/json`). `text/plain` or empty → null bind, no error.
-2. **The DTO has no public parameterless constructor** (common after adopting `record` types with required init-only properties on .NET 6 — System.Text.Json before .NET 7 could not populate them).
+2. **The DTO uses the `required` modifier on properties, and the project is on .NET 6.** System.Text.Json learned the `required` keyword in .NET 7 (STJ 7). On .NET 6, STJ silently fails to honor `required` members. Records with ordinary parameterized constructors DO work on STJ 5/6 — it's specifically the `required` keyword that's absent before STJ 7.
 3. **A property the JSON uses has no public setter** — System.Text.Json silently skips it. If ALL properties are skipped, the resulting object may be null or default-constructed.
 4. **The JSON root is an array but the parameter is a single object** (or vice versa) — silent null bind.
 5. **`ApiBehaviorOptions.SuppressModelStateInvalidFilter = true`** was set somewhere — the automatic 400 response was disabled, so binding errors return null instead of a 400.
@@ -121,7 +125,14 @@ Also read `Request.ContentType` at the top of the action and log it — if it's 
 [Route("api/[controller]")]
 public class OrdersController : ControllerBase { ... }
 ```
-Or apply globally: `builder.Services.AddControllers(o => o.SuppressAsyncSuffixInActionNames = false);` combined with `[ApiController]` on a base class. Never mix `Controller` (returns views) with `[ApiController]` — use `ControllerBase`.
+To apply `[ApiController]` everywhere without repeating it, inherit every API controller from a base class that carries the attribute:
+```csharp
+[ApiController]
+public abstract class ApiControllerBase : ControllerBase { }
+
+public class OrdersController : ApiControllerBase { ... }  // inherits [ApiController]
+```
+Or apply it at the assembly level with `[assembly: ApiController]` in any `.cs` file — all controllers in the assembly then behave as if annotated. Never mix `Controller` (returns views) with `[ApiController]` — use `ControllerBase` as the base class for API endpoints.
 
 ### Pattern: DateTime query string parameter binds to wrong value or throws — culture / format mismatch
 **Symptom:** `?date=2024-03-05` binds correctly in development but throws `FormatException` in production, or binds to a wrong date (month and day swapped). Happens after deploying to a server with a different OS locale.
@@ -132,14 +143,8 @@ Or apply globally: `builder.Services.AddControllers(o => o.SuppressAsyncSuffixIn
 // Program.cs — very early, before any other service registration
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
-
-// For query binding specifically:
-builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
-builder.Services.AddControllers(o => {
-    // Use DateTimeOffset for wire contracts — always round-trips with offset
-});
 ```
-For request body JSON: System.Text.Json always uses ISO-8601, so `[FromBody]` is safe. Only `[FromQuery]` / `[FromRoute]` / `[FromForm]` are at risk. When in doubt: use `DateTimeOffset`, not `DateTime`, in DTOs. `DateTime.Kind == Unspecified` after deserialization is a frequent silent timezone bug.
+And in API contracts use `DateTimeOffset` (not `DateTime`) — it preserves the offset through JSON and through query-string round-trips, and eliminates the `Kind == Unspecified` surprise entirely. For request body JSON this is mostly academic: System.Text.Json always uses ISO-8601 for `DateTime`/`DateTimeOffset`, so `[FromBody]` is safe. Only `[FromQuery]` / `[FromRoute]` / `[FromForm]` are at risk, because those go through the culture-sensitive type converter path. `DateTime.Kind == Unspecified` after deserialization is a frequent silent timezone bug — using `DateTimeOffset` avoids it.
 
 ---
 
@@ -147,8 +152,8 @@ For request body JSON: System.Text.Json always uses ISO-8601, so `[FromBody]` is
 
 ### Pattern: Scoped DbContext captured by singleton — "A second operation was started on this context instance"
 **Symptom:** Random `InvalidOperationException: A second operation was started on this context instance before a previous operation completed. This is usually caused by different threads concurrently using the same instance of DbContext.` Happens under concurrent load, disappears at low traffic, not reproducible in tests. No obvious threading code in the app.
-**Why:** A singleton service (registered with `AddSingleton`) holds a reference to a scoped service (`AddScoped<AppDbContext>`). The singleton is constructed once, receives the DbContext from the first request's scope, and keeps using it for every subsequent request on every thread. The DbContext is not thread-safe and is also disposed at the end of the first request — so you get either the "second operation" exception or `ObjectDisposedException`, intermittently. ASP.NET Core's DI container detects this at startup via `ValidateScopes`, but only in Development and only if you explicitly opt in.
-**Prove:** Enable scope validation in every environment:
+**Why:** A singleton service (registered with `AddSingleton`) holds a reference to a scoped service (`AddScoped<AppDbContext>`). The singleton is constructed once, receives the DbContext from the first request's scope, and keeps using it for every subsequent request on every thread. The DbContext is not thread-safe and is also disposed at the end of the first request — so you get either the "second operation" exception or `ObjectDisposedException`, intermittently. ASP.NET Core's DI container detects this at startup via `ValidateScopes`, which `WebApplication.CreateBuilder` **enables by default in the Development environment** since .NET 6 — but in Staging and Production it is OFF by default. So the bug can pass through a Development-only CI run and explode only in Staging.
+**Prove:** Enable scope validation in EVERY environment so Staging/Production catches it at startup instead of at first concurrent request:
 ```csharp
 // Program.cs
 builder.Host.UseDefaultServiceProvider(opts => {
@@ -156,7 +161,7 @@ builder.Host.UseDefaultServiceProvider(opts => {
     opts.ValidateOnBuild = true;       // check every registered service at startup
 });
 ```
-Rerun the app. If the startup throws `InvalidOperationException: Cannot consume scoped service 'AppDbContext' from singleton 'MyBackgroundWorker'` → you have confirmation and the exact captured service is named.
+Rerun the app. If the startup throws `InvalidOperationException: Cannot consume scoped service 'AppDbContext' from singleton 'MyBackgroundWorker'` → you have confirmation and the exact captured service is named. Note: this option must be set via `UseDefaultServiceProvider` before `builder.Build()` — setting it after has no effect.
 **Fix:** Never inject a scoped service directly into a singleton. Inject `IServiceScopeFactory` instead and create a scope per unit of work:
 ```csharp
 public class MyBackgroundWorker : BackgroundService {
@@ -228,7 +233,7 @@ Rule: `IOptionsMonitor` for singletons/background services, `IOptionsSnapshot` f
    }
    ```
    This tells `await` not to capture the context, so the continuation runs on a thread-pool thread and the deadlock is broken. **`ConfigureAwait(false)` is required on EVERY `await` in the chain** — missing one anywhere re-introduces the capture. In ASP.NET Core application code it's unnecessary (no context); in library code that might be loaded by a legacy host, it's mandatory.
-**Do NOT:** wrap the call in `Task.Run(() => x.Result).Result` ("hide the sync context") — that burns a thread-pool thread to block another thread-pool thread and can cause thread-pool starvation (see Category 11). The real fix is async propagation.
+**Do NOT:** wrap the call in `Task.Run(() => x.Result).Result` ("hide the sync context") — that burns a thread-pool thread to block another thread-pool thread and can cause thread-pool starvation (see the next pattern in this category). The real fix is async propagation.
 
 ### Pattern: `async void` swallows exceptions and crashes the process
 **Symptom:** An unhandled exception crashes the app instead of being caught by a try/catch. Exception source is an event handler, a `Timer` callback, or a fire-and-forget call. `try { MyAsyncVoidMethod(); } catch { ... }` does not catch anything.
@@ -361,7 +366,7 @@ new SocketsHttpHandler {
 
 ### Pattern: N+1 query from lazy loading or `Include` omission
 **Symptom:** One list endpoint is 200x slower than expected. Database CPU spikes when that endpoint is hit. SQL log shows 1 outer query plus one query per row in the result, all hitting the same table. Happens only when the list is enumerated — the query itself is fast in isolation.
-**Why:** EF Core issues a query per navigation property access unless you explicitly `Include` the relation or project into a DTO. On EF Core 5+ with `UseLazyLoadingProxies()`, simply touching `order.Customer.Name` in a `foreach` loop issues one extra query per order. Without proxies, the property is `null` and you get a `NullReferenceException` instead — fixing that by adding a separate `FirstOrDefault` inside the loop produces the same N+1.
+**Why:** EF Core issues a query per navigation property access unless you explicitly `Include` the relation or project into a DTO. On EF Core 2.1+ with `UseLazyLoadingProxies()` (requires the `Microsoft.EntityFrameworkCore.Proxies` package and virtual navigation properties), simply touching `order.Customer.Name` in a `foreach` loop issues one extra query per order. Without proxies, the property is `null` and you get a `NullReferenceException` instead — fixing that by adding a separate `FirstOrDefault` inside the loop produces the same N+1.
 **Prove:** Enable sensitive data logging (development only) and capture the SQL:
 ```csharp
 // Program.cs (Development)
@@ -440,7 +445,7 @@ Rule: `AsNoTracking` is only for read-only queries. The moment you mutate and in
 
 ### Pattern: Multiple `SaveChangesAsync` calls in one operation — partial writes on exception
 **Symptom:** A business operation writes to three tables via three separate `SaveChangesAsync` calls. An exception in the third write leaves tables 1 and 2 updated, table 3 unchanged. Subsequent retries fail uniqueness constraints because of the partial writes. Only reproduces under specific error paths.
-**Why:** Each `SaveChangesAsync` opens its own implicit transaction. If the first two succeed and the third throws, the first two are already committed. There is no automatic rollback across `SaveChanges` calls. `TransactionScope` is ambient but EF Core does not automatically enlist in it for SQL Server unless you call `UseTransactionScope` or manually begin/commit.
+**Why:** Each `SaveChangesAsync` opens its own implicit transaction. If the first two succeed and the third throws, the first two are already committed. There is no automatic rollback across `SaveChanges` calls. An ambient `TransactionScope` DOES auto-enlist when a new SQL connection is opened inside it, but only if the scope was created with `TransactionScopeAsyncFlowOption.Enabled` (without it, the ambient scope is lost across the first `await` and the second `SaveChangesAsync` runs outside the transaction — giving you exactly the same partial-write symptom). For clarity and predictability, prefer an explicit `BeginTransactionAsync` over relying on `TransactionScope`.
 **Prove:** Grep the business method for multiple `SaveChanges*` calls. Any method with more than one is a candidate. Wrap the whole method in an explicit transaction as the fix test — if the partial-write symptom disappears, this was the cause.
 **Fix:** One transaction for the whole operation, one `SaveChanges` at the end. If you need intermediate IDs (auto-increment keys), use an explicit transaction:
 ```csharp
@@ -552,7 +557,7 @@ public class QueueHandler {
 
 ### Pattern: `StackOverflowException` or 413 Payload Too Large on serializing EF entity graph
 **Symptom:** Returning an EF Core entity directly from a controller throws `StackOverflowException` or times out producing a massive JSON response. Or: serializer throws `JsonException: A possible object cycle was detected`. Only happens when the entity has a navigation property that navigates back to itself.
-**Why:** EF entities commonly have bidirectional navigations (`Order.Customer` and `Customer.Orders`). System.Text.Json serializes by walking every property → infinite recursion. .NET 5+ throws `JsonException` for cycles (safer); .NET Core 3.1 stack-overflowed. Even non-cyclic graphs often pull in the entire database when serialized naively — `Order.Customer.Orders.Customer.Orders...`.
+**Why:** EF entities commonly have bidirectional navigations (`Order.Customer` and `Customer.Orders`). System.Text.Json walks every property on serialization. Since .NET Core 3.0, STJ has always detected object cycles and thrown `JsonException("A possible object cycle was detected which is not supported...")` by default. .NET 6 added the friendlier `ReferenceHandler.IgnoreCycles` option, and `ReferenceHandler.Preserve` for `$id`/`$ref` emission. Even with cycle detection, non-cyclic-but-oversized graphs (`Order.Customer.Orders.Customer.Orders...` on a graph that isn't strictly self-referential) pull in enormous slices of the database when serialized naively, and the cost shows up as a huge response body and slow endpoint, not an exception.
 **Prove:** Temporarily return `order.Id` only. If that works but returning `order` crashes → cyclic or oversized graph.
 **Fix:** **Never return EF entities directly from a controller.** Project into a DTO:
 ```csharp
@@ -673,6 +678,12 @@ Rule: every options class should validate at startup. Invalid config should prev
 **Prove:** Log `HttpContext.Connection.RemoteIpAddress` and `HttpContext.Request.Headers["X-Forwarded-For"]` at the top of a probe endpoint. If the former is the LB IP while the latter contains the real client IP → ForwardedHeaders middleware is missing.
 **Fix:** Add the middleware FIRST, before any other middleware that cares about scheme or IP (auth, logging, rate limiting):
 ```csharp
+using Microsoft.AspNetCore.HttpOverrides;
+// NOTE: on .NET 8+, also disambiguate — System.Net.IPNetwork was added in .NET 8
+// and will collide with Microsoft.AspNetCore.HttpOverrides.IPNetwork if both namespaces
+// are in scope. Use the fully qualified name if you hit CS0104:
+// using AspIpNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
+
 // Program.cs
 builder.Services.Configure<ForwardedHeadersOptions>(options => {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -680,7 +691,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options => {
     options.KnownProxies.Clear();
     options.KnownNetworks.Clear();
     // Add your LB / nginx subnet — do NOT leave this empty in production
-    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 16));
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+        IPAddress.Parse("10.0.0.0"), 16));
 });
 
 var app = builder.Build();
@@ -717,7 +729,7 @@ For IIS: `<requestLimits maxAllowedContentLength="104857600" />` in `web.config`
 
 ### Pattern: App runs in IIS but `HostingEnvironment` is wrong / `appsettings.*.json` wrong file loads
 **Symptom:** Same binary works correctly from `dotnet run` with `ASPNETCORE_ENVIRONMENT=Staging`, but when hosted in IIS it loads `appsettings.Production.json`. Environment variables set at the OS level don't reach the app.
-**Why:** IIS runs the .NET process inside `w3wp.exe` (in-process) or a child `dotnet.exe` (out-of-process). Environment variables must be declared in `web.config`'s `<aspNetCore><environmentVariables>` section — system env vars don't inherit unless IIS is explicitly restarted AND the app pool is recycled AFTER the system var was set.
+**Why:** IIS runs the .NET app either in-process inside `w3wp.exe` or out-of-process as a child `dotnet.exe`. Either way, the app pool worker process inherits system environment variables only AT its launch time — same rules as any Windows process. If a system-level env var is added or changed AFTER the pool started, `w3wp.exe` does not see the new value until the app pool recycles (and in some cases you also need to restart WAS/IIS to pick up a brand-new variable). Because app pools are long-lived, this makes "set env var at the OS level" unreliable in practice. The reliable, version-controlled approach is to declare env vars inside `web.config`'s `<aspNetCore><environmentVariables>` section, which applies at every pool recycle regardless of OS-level state.
 **Prove:** Hit `/probe` and log `Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")`. If it's `Production` (the default when unset) but you expected `Staging`, IIS is not passing the var.
 **Fix:** Declare in `web.config`:
 ```xml
@@ -812,9 +824,10 @@ Rule: if your concurrency check uses two statements to inspect and act, it's rac
 
 ## CATEGORY 12 — .NET VERSION MIGRATION GOTCHAS
 
-### Pattern: After .NET 6 → 7/8 upgrade, `DateTime.Kind` round-trip now fails silently
-**Symptom:** Code that stored `DateTime.UtcNow` in a PostgreSQL `timestamp with time zone` column worked on .NET 6 + Npgsql 6, broken on .NET 7/8 + Npgsql 7+. New error: `Cannot write DateTime with Kind=Unspecified to PostgreSQL type 'timestamp with time zone', only UTC is supported.` Or: silently stores wrong timezone.
-**Why:** Npgsql 6.0 enforced a new strict mode where `timestamp with time zone` accepts ONLY `DateTime` values with `Kind == Utc`. `Kind == Unspecified` (the default for `DateTime.Parse`, deserialization from JSON pre-.NET 7, or DB reads in some scenarios) now throws. The change was announced but not obvious in the upgrade guide. The fix is NOT to switch the DB column type — it's to ensure every DateTime written is explicitly UTC.
+### Pattern: After Npgsql 5 → 6 upgrade, writing `DateTime` to PostgreSQL `timestamptz` throws
+**Symptom:** Code that stored `DateTime.UtcNow` in a PostgreSQL `timestamp with time zone` column worked previously, now throws `Cannot write DateTime with Kind=Unspecified to PostgreSQL type 'timestamp with time zone', only UTC is supported.` at every INSERT/UPDATE. Started after an Npgsql version bump — which commonly coincides with a .NET version upgrade but is not caused by it (Npgsql 5 on .NET 8 is fine; Npgsql 6 on .NET 6 hits the bug).
+**Why:** Npgsql 6.0 (released late 2021) introduced a strict mode where `timestamp with time zone` accepts ONLY `DateTime` values with `Kind == Utc`. `Kind == Unspecified` (the default for `DateTime.Parse("2024-01-01")`, deserialization from JSON strings without a `Z` or offset, `DateTime.Now`, or DB reads of `timestamp without time zone` columns) now throws. This change is in the Npgsql 6 release notes, not in any .NET release notes — which is why it's missed during upgrades. The fix is NOT to switch the DB column type — it's to ensure every `DateTime` written is explicitly UTC.
+**Prove:** Check the package version of `Npgsql.EntityFrameworkCore.PostgreSQL` (or `Npgsql` directly) in the project — if it's `>= 6.0.0`, the new behavior is in effect. Log `myDate.Kind` at the point of write. If it's `Unspecified` → this is the bug. Deserialization is the most common culprit: `JsonSerializer.Deserialize<MyDto>(json)` where `json` contains `"2024-01-01T10:00:00"` (no timezone designator) produces `Kind == Unspecified`.
 **Prove:** Log `myDate.Kind` at the point of write. If it's `Unspecified` → this is the bug. Deserialization is the most common culprit: `JsonSerializer.Deserialize<MyDto>(json)` produces `DateTime` values with `Kind == Unspecified` unless the string includes `Z` or a `+00:00` offset.
 **Fix:** Three layers:
 1. **Use `DateTimeOffset` in API contracts** — preserves offset through JSON, avoids the question entirely.
@@ -861,27 +874,59 @@ builder.Services.ConfigureHttpJsonOptions(o => {
 ```
 If you don't need AOT: simply don't register a `JsonSerializerContext`, and .NET falls back to runtime reflection which serializes anything. AOT is opt-in; the runtime fallback is the default for non-AOT builds.
 
-### Pattern: `IAsyncEnumerable<T>` returned from a controller — client receives an empty array or hangs
-**Symptom:** New endpoint returns `IAsyncEnumerable<Order>` directly. Browser shows `[]`, or never receives the response, or gets the full response but with a very long delay. Adjacent endpoints returning `List<Order>` work fine.
-**Why:** ASP.NET Core buffers `IAsyncEnumerable` results by default before flushing, so the "streaming" benefit is lost, and one misbehaving enumerator (infinite loop, waits on an unfired signal) never completes and the response never flushes. Also: if the underlying enumerator throws after the first item, the exception surfaces mid-response as a mangled JSON body, not a clean 500.
-**Prove:** Log entry to the controller, log each yielded item, log exit. If entry fires but no items are yielded, the enumerator is hung. If items are yielded but client receives nothing, buffering is delaying flush.
-**Fix:** Decide explicitly between buffered and streaming:
-- **Buffered (simplest, recommended for < 10k rows):** materialize before returning.
-  ```csharp
-  [HttpGet]
-  public async Task<List<Order>> Get() =>
-      await _db.Orders.AsNoTracking().ToListAsync();
-  ```
-- **Streamed (for very large results):** return `IAsyncEnumerable` but disable response buffering and set the content type manually:
-  ```csharp
-  [HttpGet]
-  public async IAsyncEnumerable<Order> Stream([EnumeratorCancellation] CancellationToken ct) {
-      await foreach (var o in _db.Orders.AsAsyncEnumerable().WithCancellation(ct)) {
-          yield return o;
-      }
-  }
-  ```
-  And configure streaming: `builder.Services.Configure<MvcOptions>(o => { ... });` — but be aware that errors mid-stream cannot be reported as a JSON error body; the client sees a truncated array. Use `NDJSON` (`application/x-ndjson`) for robust streaming, where each item is a separate line and a trailing empty line or control message signals end.
+### Pattern: `IAsyncEnumerable<T>` returned from a controller — truncated array, `ObjectDisposedException`, or hang
+**Symptom:** Endpoint returns `IAsyncEnumerable<Order>` (with `yield return`). Depending on the specific failure mode, the client sees one of:
+(a) A truncated JSON array — e.g. 3 items followed by the connection closing, or the bytes `[{...},{...},` with no closing bracket.
+(b) A 500 with `ObjectDisposedException: Cannot access a disposed context instance` in server logs, thrown mid-stream.
+(c) A successful first item, then the endpoint hangs for minutes before the client times out.
+(d) Empty `[]` with no server-side error logged.
+Adjacent endpoints returning `List<Order>` work fine.
+**Why — NOT buffering.** ASP.NET Core + System.Text.Json have streamed `IAsyncEnumerable<T>` responses end-to-end since .NET 6; items are serialized as they are produced. The failures above are from a different set of causes, all related to iterator lifetime and cancellation:
+1. **DbContext disposed before enumeration completes.** The controller returns the `IAsyncEnumerable` immediately, and the framework begins iterating it while writing the response. If the iterator body touches a DbContext that was resolved from the request scope, the scope may end (response completes) before the iterator finishes — giving `ObjectDisposedException` mid-stream and a truncated array. Using `AsAsyncEnumerable()` over a DbContext query inside a controller method that returns the enumerator is exactly this trap.
+2. **`[EnumeratorCancellation]` attribute missing on the `CancellationToken` parameter.** Without it, the framework cannot pass the request-abort token into the iterator, so the iterator never observes cancellation and keeps running after the client disconnects — at best wasting work, at worst hanging on a downstream call.
+3. **Iterator blocking on an unfired signal.** Something inside the `await foreach` body (a `Channel.Reader.ReadAsync`, `SemaphoreSlim.WaitAsync`, or awaiting a `TaskCompletionSource` that never completes) blocks forever. The response is flushed up to the last `yield return` and then hangs.
+4. **Error mid-stream.** Once the first item is written, the response status code is already 200 and the headers are flushed. An exception thrown on item N cannot surface as a JSON error body — the client just sees a truncated array and no clean 500.
+
+**Prove:** Log entry, each `yield return`, and exit of the iterator. Also log `CancellationToken.IsCancellationRequested` on each iteration. Mappings:
+- Entry logs but no yields → iterator is blocked before the first item (cause 3).
+- Yields stop mid-stream with `ObjectDisposedException` in logs → cause 1 (DbContext lifetime).
+- Yields stop mid-stream with a non-disposed exception → cause 4 (error mid-stream).
+- Yields continue after client disconnected (check with `curl --max-time 1`) → cause 2 (missing `[EnumeratorCancellation]`).
+
+**Fix:**
+1. **Materialize inside the controller scope when the row count is bounded.** For any list endpoint under ~10k rows, return `List<T>` — not `IAsyncEnumerable<T>`. The DbContext stays alive for exactly one `ToListAsync()` and everything about the streaming failure mode goes away:
+   ```csharp
+   [HttpGet]
+   public async Task<List<Order>> Get() =>
+       await _db.Orders.AsNoTracking().ToListAsync();
+   ```
+2. **If you must stream**, always annotate the cancellation token and await each item so the DbContext stays alive for the whole enumeration. Do NOT return an `IAsyncEnumerable` that closes over a request-scoped DbContext without this:
+   ```csharp
+   [HttpGet]
+   public async IAsyncEnumerable<Order> Stream(
+       [EnumeratorCancellation] CancellationToken ct)    // <-- required
+   {
+       // Hold the context alive for the full enumeration by iterating inside the method
+       await foreach (var o in _db.Orders.AsNoTracking().AsAsyncEnumerable().WithCancellation(ct)) {
+           yield return o;
+       }
+       // When this method's async state machine completes, the request scope (and
+       // therefore _db) is still alive — because the framework is iterating THIS method.
+   }
+   ```
+3. **For truly large results, use NDJSON** (`application/x-ndjson`), not a JSON array. NDJSON is one complete JSON object per line, so a truncation leaves N complete objects and zero malformed ones — the client can detect EOF mid-stream and recover. Write it directly to `Response.Body`:
+   ```csharp
+   [HttpGet, Produces("application/x-ndjson")]
+   public async Task Stream(CancellationToken ct) {
+       Response.ContentType = "application/x-ndjson";
+       await foreach (var o in _db.Orders.AsNoTracking().AsAsyncEnumerable().WithCancellation(ct)) {
+           await JsonSerializer.SerializeAsync(Response.Body, o, cancellationToken: ct);
+           await Response.Body.WriteAsync("\n"u8.ToArray(), ct);
+           await Response.Body.FlushAsync(ct);
+       }
+   }
+   ```
+Rule: `IAsyncEnumerable` from a controller is correct only when the iterator body does not close over a request-scoped disposable, or when you explicitly manage the scope. For every other case, materialize to a `List<T>` — it's simpler, and none of the four failure modes above can happen.
 
 ---
 
