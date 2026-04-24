@@ -191,6 +191,26 @@ Extract answers from the conversation first — only ask for what is missing.
    (load, input value, time of day, specific user, specific env)
 ```
 
+**INTAKE SUFFICIENCY CHECK (run before Phase 3):**
+```
+REQUIRED signals for any diagnosis:
+  □ Signal 1 (symptom)           — exact observable vs expected behavior
+  □ Signal 6 (code)              — section closest to failure point
+  □ Signal 7 (stack + versions)  — language, framework, exact version numbers
+  □ Signal 8 (consistent/intermittent) — failure pattern
+  □ Signal 5 (logs) OR ability to add forensic logs
+
+If any REQUIRED signal is missing:
+  List all missing signals in one statement, then proceed to Phase 2:
+  "Proceeding without [signal name(s)].
+   Confidence ceiling = MEDIUM until [signal name(s)] obtained.
+   Diagnosis continues through Phase 2 — verdict is conditional on obtaining [signal name(s)]."
+
+OPTIMAL intake for HIGH-confidence verdict:
+  All 8 signals, especially signal 3 (recent changes — the delta is often the bug)
+  and signal 4 (closed paths — prevents wasted diagnosis on already-tried fixes).
+```
+
 ---
 
 ## PHASE 2 — TRIAGE (Internal — Do Not Show to User)
@@ -362,6 +382,18 @@ Single factor:  One line is wrong. Standard Phase 3.
 Multi-factor:   Multiple conditions must align to trigger the bug.
                 Map ALL contributing factors before fixing any one.
                 Fixing factor 1 alone will not fix the bug.
+```
+
+**MULTI-FACTOR CONFIDENCE CEILING:**
+```
+If Phase 2F identifies 2+ contributing factors:
+  → Confidence ceiling = MEDIUM for any verdict addressing fewer than all factors.
+  → To achieve HIGH confidence: the AFTER block must address every identified factor.
+  → The verdict must state:
+     "Contributing factors: [list all N]. This fix addresses [M of N]."
+  → If M < N: this is an EXPLICITLY PARTIAL verdict.
+     Pre-flag Phase 6 as expected — it is not a failure, it is the plan.
+     The remaining factors become the starting hypotheses for the next round.
 ```
 
 ### 2G — Meta-Checks (Always Run Before Diagnosis)
@@ -812,6 +844,10 @@ Fast-path requires ALL of the following:
 □ The cause is deterministic — one cause, one effect, no timing dependency
 □ The fix is precise and affects only the proven failure point
 □ A reasonable engineer reading the log would have no alternative explanation
+□ You have explicitly named at least 2 alternative explanations and stated why
+  the forensic evidence makes each one impossible, not just unlikely.
+  Cannot name a single alternative → almost always tunnel vision, not clarity.
+  Write them out. Eliminating named alternatives is the only proof of unambiguity.
 ```
 
 A reference file's pattern **Prove** log showing the exact signature described for that
@@ -823,7 +859,7 @@ some Prove outputs narrow to one pattern; others narrow to two or three. State i
 "Pattern proof: [pattern name] Prove log shows [exact output]. This matches the described
 signature. Remaining alternatives eliminated / still possible: [state honestly]."
 
-If ALL four are true → issue the verdict with HIGH confidence. State the proof
+If ALL five are true → issue the verdict with HIGH confidence. State the proof
 explicitly in the verdict as: "Direct proof: [log line / result that proves it]"
 
 If ANY is uncertain → run the full gate (Steps 1–5 below).
@@ -836,18 +872,41 @@ List the 3 strongest alternative explanations for the same symptom.
 Do NOT generate strawmen. These must be genuinely plausible.
 Steelman each one — make the best possible case FOR it.
 
+**CH PREDICTION REQUIREMENT (fill before moving to Step 2):**
+For each CH, answer this question before scoring it:
+```
+"If THIS hypothesis were correct (not PH), what specific observable
+ would be DIFFERENT from what we currently see?
+ What would the logs show / not show? What behavior would change?"
+```
+If you cannot answer this → the hypothesis was never genuinely considered.
+Replace it with one you can make a prediction for.
+A hypothesis with no falsifiable prediction is a strawman — eliminating it
+produces false confidence, not real elimination.
+
+Example:
+```
+CH: "Backend is returning a 500 error"
+Prediction: "Network tab shows a 500 response (not 200).
+             Server logs show an exception stack trace."
+Check result: 200 returned, no stack trace → CH eliminated by DIAGNOSTIC evidence.
+```
+
 ```
 PRIMARY HYPOTHESIS (PH):
 [The root cause you currently believe]
 
 COMPETING HYPOTHESIS 1 (CH-1):
 [The most plausible alternative — what a skeptic would say]
+Prediction: [what would we observe if this, not PH, is true?]
 
 COMPETING HYPOTHESIS 2 (CH-2):
 [Second most plausible alternative]
+Prediction: [what would we observe if this, not PH, is true?]
 
 COMPETING HYPOTHESIS 3 (CH-3):
 [Third most plausible alternative]
+Prediction: [what would we observe if this, not PH, is true?]
 ```
 
 ---
@@ -869,6 +928,25 @@ You need a row where CH-x = NO to eliminate it.
 Evidence that eliminates an alternative is called DIAGNOSTIC evidence.
 Evidence that merely doesn't contradict is called CONSISTENT evidence.
 Consistent evidence proves nothing. Only diagnostic evidence eliminates.
+
+EVIDENCE CLASSIFICATION (fill before Step 3):
+For each piece of evidence, label it explicitly:
+
+| Evidence | DIAGNOSTIC or CONSISTENT? | If DIAGNOSTIC: impossible for which CH? |
+|---|---|---|
+| [evidence 1] | | |
+| [evidence 2] | | |
+| [forensic log result] | | |
+
+CONFIDENCE CEILING DERIVED FROM CLASSIFICATION:
+  All rows CONSISTENT (zero DIAGNOSTIC rows):
+    → Confidence ceiling = MEDIUM regardless of how strongly PH fits.
+    → Verdict may be issued at MEDIUM. Must state:
+       "No diagnostic evidence found — MEDIUM ceiling applies."
+  1+ row is DIAGNOSTIC against each of CH-1, CH-2, and CH-3:
+    → HIGH confidence is permitted if all other gate criteria are met.
+  1+ row is DIAGNOSTIC against some CHs but not all:
+    → HIGH confidence for eliminated CHs. Remaining CHs require Step 5.
 ```
 
 ---
@@ -962,6 +1040,12 @@ The verdict includes the gate's confidence score. It is non-negotiable.
 ```
 GATE STATUS: [PASS — HIGH / PASS — MEDIUM]
 CONFIDENCE:  [HIGH 90-95% / MEDIUM 70-85%]
+VERDICT SCOPE: [NEAR-CAUSE / ROOT-CAUSE / SYSTEMIC]
+  NEAR-CAUSE  — this specific instance fixed; same failure class may recur.
+                Add one regression test to detect recurrence.
+  ROOT-CAUSE  — the failure mechanism (not just the symptom) fixed; this failure class cannot recur.
+  SYSTEMIC    — underlying condition removed; requires a design/process change.
+                Before implementing: confirm scope with user — this is a refactor, not a bug fix.
 
 ROOT CAUSE:
 [One sentence. Specific. Stated as fact.]
@@ -1145,6 +1229,16 @@ VERIFICATION CHECKLIST
    □ Trigger the exact failing scenario from Phase 0
    □ Confirm: no console errors, network requests correct, DOM state correct
    □ This replaces manual DevTools steps — verify directly, do not describe.
+
+5b. MEDIUM-CONFIDENCE VERDICT RE-TEST (applies to ALL bug types — not only frontend)
+   Skip entirely if verdict was HIGH confidence. Run if verdict was MEDIUM.
+   □ The Phase 3.10 verdict flagged this dependency:
+       "[copy the 'The verdict depends on...' line from the verdict here]"
+   □ Re-test under the exact flagged condition from Phase 3.10.
+   □ If bug behaves as predicted → confidence confirmed. Close as fixed.
+   □ If bug behaves differently → Phase 6. The root cause was wrong — not the fix.
+   Do NOT close the bug as fixed until this step passes or is explicitly waived
+   with a documented reason.
 ```
 
 ---
@@ -1273,6 +1367,15 @@ state it as a confirmed known bug with source link.
 33. **Silent failure?** Find the swallow. Something is catching and dropping the error.
 34. **Works locally, fails in prod?** Always environment: config, secrets, version, load, timing.
 35. **Never revisit closed paths.** Already tried = dead path. Move on.
+
+**Single-shot confidence:**
+36. **Check intake sufficiency before Phase 3.** Missing signal 1, 6, 7, or 8 → state the confidence ceiling explicitly. Diagnose, but don't claim HIGH confidence on partial intake.
+37. **Multi-factor bug? Cap the verdict.** If Phase 2F finds 2+ factors, HIGH confidence requires all factors addressed. A single-factor fix on a multi-factor bug is an EXPLICITLY PARTIAL verdict — pre-flag Phase 6.
+38. **Fast-path? Name two alternatives first.** "No other explanation" claimed without listing alternatives is tunnel vision dressed as clarity. Write them out. Eliminate them by name.
+39. **Every CH needs a falsifiable prediction.** Before scoring a competing hypothesis, state what you would observe if it were true. No prediction = no hypothesis. Replace strawmen with real ones.
+40. **Label evidence DIAGNOSTIC or CONSISTENT before scoring.** All evidence CONSISTENT → confidence ceiling is MEDIUM, period. DIAGNOSTIC evidence against every CH → HIGH confidence permitted.
+41. **Declare verdict scope: near-cause, root-cause, or systemic.** Near-cause fixes stop recurrence of this instance. Root-cause fixes stop the class. Know which you're doing.
+42. **MEDIUM verdict? Run the re-test before closing.** The Phase 3.10 conditional ("depends on [key evidence], re-test under [condition]") is not advisory — it is mandatory in Phase 5 item 5b.
 
 ---
 

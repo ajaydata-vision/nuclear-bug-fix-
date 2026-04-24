@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.22] - 2026-04-23
+
+### Single-Shot Confidence Upgrades
+
+Seven structural changes to the DDx Gate that make HIGH confidence a mechanical test, not a judgment call.
+
+- **Intake sufficiency gate (Phase 1)** — missing signals 1, 6, 7, or 8 now set an explicit MEDIUM confidence ceiling before Phase 3 begins. Diagnosis continues; verdict is conditional.
+- **Multi-factor confidence ceiling (Phase 2F)** — if 2+ contributing factors found, HIGH confidence requires all factors addressed. Partial fixes labeled EXPLICITLY PARTIAL with Phase 6 pre-flagged.
+- **Fast-path hardening (Phase 3.9)** — 5th checkbox: must name at least 2 alternatives and state why forensic evidence makes each impossible. "ALL four" → "ALL five."
+- **CH prediction requirement (Phase 3.9 Step 1)** — each competing hypothesis must specify what observable would differ if it were true. Strawman hypotheses must be replaced before scoring.
+- **Evidence classification forcing function (Phase 3.9 Step 2)** — evidence must be labeled DIAGNOSTIC or CONSISTENT before gate is scored. All-CONSISTENT → MEDIUM ceiling, mechanically.
+- **Verdict scope declaration (Phase 3.10)** — NEAR-CAUSE / ROOT-CAUSE / SYSTEMIC field added to verdict template. Near-cause requires regression test; systemic requires user confirmation.
+- **MEDIUM verdict re-test (Phase 5 item 5b)** — the conditional re-test flagged in MEDIUM confidence verdicts is now mandatory. Bug cannot be closed until re-test passes or is waived with documented reason.
+- **Ironclad Rules 36–42** — one rule per upgrade, under "Single-shot confidence:" subheading.
+
 ## [1.21] - 2026-04-14
 
 ### Final Output Gate (Pre-Delivery Self-Check)
