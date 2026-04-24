@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.21",
-  "source_commit": "bb4f2353dc2be1c24acf45f0bec70bc3491fa1fd",
-  "source_commit_short": "bb4f235",
-  "source_date": "2026-04-14",
-  "source_subject": "v1.21 followup: replace section sign and >= with ASCII in Final Output Gate",
+  "version": "1.22",
+  "source_commit": "0256fdb74eaeaf90dab1c0d88e20c96a6b6f87da",
+  "source_commit_short": "0256fdb",
+  "source_date": "2026-04-24",
+  "source_subject": "feat: v1.22 single-shot confidence upgrades \u2014 7 DDx Gate forcing functions, rules 36-42",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
