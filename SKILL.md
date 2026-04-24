@@ -388,7 +388,8 @@ Multi-factor:   Multiple conditions must align to trigger the bug.
 ```
 If Phase 2F identifies 2+ contributing factors:
   → Confidence ceiling = MEDIUM for any verdict addressing fewer than all factors.
-  → To achieve HIGH confidence: the AFTER block must address every identified factor.
+  → To achieve HIGH confidence: the response must address every identified factor
+     (code change, config update, or documented process step as appropriate).
   → The verdict must state:
      "Contributing factors: [list all N]. This fix addresses [M of N]."
   → If M < N: this is an EXPLICITLY PARTIAL verdict.
@@ -946,7 +947,8 @@ CONFIDENCE CEILING DERIVED FROM CLASSIFICATION:
   1+ row is DIAGNOSTIC against each of CH-1, CH-2, and CH-3:
     → HIGH confidence is permitted if all other gate criteria are met.
   1+ row is DIAGNOSTIC against some CHs but not all:
-    → HIGH confidence for eliminated CHs. Remaining CHs require Step 5.
+    → Those CHs are eliminated. Remaining uneliminated CHs must be addressed
+      in Step 5 before HIGH confidence is granted for the verdict.
 ```
 
 ---
@@ -1048,7 +1050,9 @@ VERDICT SCOPE: [NEAR-CAUSE / ROOT-CAUSE / SYSTEMIC]
                 Before implementing: confirm scope with user — this is a refactor, not a bug fix.
 
 ROOT CAUSE:
-[One sentence. Specific. Stated as fact.]
+[One sentence. Specific. Stated as fact.
+ For NEAR-CAUSE verdicts: state the proximate cause here. The systemic root
+ cause is found in Phase 3.11 — do not conflate the two.]
 
 WHY THIS HAPPENED:
 [One sentence explaining the mechanism.]
@@ -1224,7 +1228,7 @@ VERIFICATION CHECKLIST
    □ What test should be added to the regression suite?
    Document this. Don't skip it. It's how the team gets smarter.
 
-5. FRONTEND BUG + chrome-devtools-mcp configured?
+5a. FRONTEND BUG + chrome-devtools-mcp configured?
    □ Navigate to the fixed page in the live browser
    □ Trigger the exact failing scenario from Phase 0
    □ Confirm: no console errors, network requests correct, DOM state correct
@@ -1232,9 +1236,11 @@ VERIFICATION CHECKLIST
 
 5b. MEDIUM-CONFIDENCE VERDICT RE-TEST (applies to ALL bug types — not only frontend)
    Skip entirely if verdict was HIGH confidence. Run if verdict was MEDIUM.
-   □ The Phase 3.10 verdict flagged this dependency:
-       "[copy the 'The verdict depends on...' line from the verdict here]"
-   □ Re-test under the exact flagged condition from Phase 3.10.
+   □ Copy the full MEDIUM confidence block from Phase 3.10 here:
+       "The verdict depends on [key evidence]. If that evidence turns out
+        to be wrong, the most likely alternative would be [CH-x].
+        Re-test under [condition] to confirm."
+   □ Re-test under the exact [condition] specified above.
    □ If bug behaves as predicted → confidence confirmed. Close as fixed.
    □ If bug behaves differently → Phase 6. The root cause was wrong — not the fix.
    Do NOT close the bug as fixed until this step passes or is explicitly waived
@@ -1369,7 +1375,7 @@ state it as a confirmed known bug with source link.
 35. **Never revisit closed paths.** Already tried = dead path. Move on.
 
 **Single-shot confidence:**
-36. **Check intake sufficiency before Phase 3.** Missing signal 1, 6, 7, or 8 → state the confidence ceiling explicitly. Diagnose, but don't claim HIGH confidence on partial intake.
+36. **Check intake sufficiency before Phase 3.** Missing signal 1, 5, 6, 7, or 8 → state the confidence ceiling explicitly. Diagnose, but don't claim HIGH confidence on partial intake.
 37. **Multi-factor bug? Cap the verdict.** If Phase 2F finds 2+ factors, HIGH confidence requires all factors addressed. A single-factor fix on a multi-factor bug is an EXPLICITLY PARTIAL verdict — pre-flag Phase 6.
 38. **Fast-path? Name two alternatives first.** "No other explanation" claimed without listing alternatives is tunnel vision dressed as clarity. Write them out. Eliminate them by name.
 39. **Every CH needs a falsifiable prediction.** Before scoring a competing hypothesis, state what you would observe if it were true. No prediction = no hypothesis. Replace strawmen with real ones.
@@ -1423,6 +1429,15 @@ free, without re-running the methodology.
        names which fast-path criterion applies. A verdict without one of these is
        a guess wearing a suit. (Rule 18.)
 
+[ ] 4b. V1.22 FORCING FUNCTIONS PRESENT. All three of the following must appear:
+        (a) Each competing hypothesis has a "Prediction:" line filled with a specific
+            observable — not a placeholder. (Rule 39.)
+        (b) The evidence table has at least one row labeled DIAGNOSTIC, OR the verdict
+            explicitly states "No diagnostic evidence found — MEDIUM ceiling applies."
+            (Rule 40.)
+        (c) VERDICT SCOPE field is present and set to NEAR-CAUSE, ROOT-CAUSE, or
+            SYSTEMIC. (Rule 41.)
+
 [ ] 5. VERDICT IS ONE SENTENCE WITH CONFIDENCE. Root cause stated in a single
        declarative sentence. Confidence label HIGH or MEDIUM is present. LOW
        confidence means return to Phase 3 — do not deliver a LOW-confidence verdict.
@@ -1435,6 +1450,10 @@ free, without re-running the methodology.
        may be "(no equivalent line existed in the original file)" — but the AFTER
        block must still show the exact added lines and where they go. Never deliver
        a fix as just prose. (Rule 24.)
+       Exception: SYSTEMIC scope verdicts (Phase 3.10) may deliver a scope-
+       confirmation recommendation without an immediate BEFORE/AFTER block, because
+       implementation requires user approval first. Item 8's verification step must
+       then describe how to confirm scope was approved and implementation begun.
 
 [ ] 7. SENTINEL LOG IN AFTER BLOCK (when the fix is executable code). If the AFTER
        block contains code that runs at request/startup time, it MUST contain a

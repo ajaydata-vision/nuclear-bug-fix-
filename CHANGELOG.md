@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.22] - 2026-04-23
+## [1.22] - 2026-04-24
 
 ### Single-Shot Confidence Upgrades
 
