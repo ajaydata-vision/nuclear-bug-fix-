@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.22",
-  "source_commit": "0256fdb74eaeaf90dab1c0d88e20c96a6b6f87da",
-  "source_commit_short": "0256fdb",
+  "version": "1.23",
+  "source_commit": "34ebef1a66f34b941852a1855f0d4efc48284077",
+  "source_commit_short": "34ebef1",
   "source_date": "2026-04-24",
-  "source_subject": "feat: v1.22 single-shot confidence upgrades \u2014 7 DDx Gate forcing functions, rules 36-42",
+  "source_subject": "v1.22 adversarial review \u2014 8 defects fixed before push",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

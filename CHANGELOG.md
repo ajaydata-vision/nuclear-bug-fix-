@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.23] - 2026-04-27
+
+### Adversarial Review Hardening
+
+Eight defects in the v1.22 DDx Gate upgrade fixed by pre-push adversarial review (Claude structured + Codex GPT-5.4).
+
+- **CHANGELOG date fix** — v1.22 entry dated 2026-04-23; corrected to 2026-04-24.
+- **Phase 5 item 5a/5b** — frontend check was labeled "5." with no "5a", making "5b" look like a sub-item; non-frontend executions would silently skip the MEDIUM verdict re-test.
+- **Rule 36 missing Signal 5** — intake sufficiency rule listed signals 1, 6, 7, 8 but omitted Signal 5 (logs), inconsistent with the intake block above it.
+- **Phase 5 5b copy instruction** — told model to copy only "The verdict depends on..." line; the re-test condition lives on a second line. Expanded to copy the full MEDIUM block.
+- **Evidence classification wording** — "HIGH confidence for eliminated CHs" was semantically wrong (confidence is verdict-level, not per-CH). Corrected to: eliminated CHs are resolved; remaining CHs must go through Step 5 before HIGH confidence is granted.
+- **FINAL OUTPUT GATE item 4b** — gate had no check for any v1.22 requirement (CH predictions, DIAGNOSTIC evidence, VERDICT SCOPE). New item 4b enforces all three.
+- **NEAR-CAUSE / ROOT CAUSE clash** — VERDICT SCOPE NEAR-CAUSE was valid but the next field was still labeled "ROOT CAUSE:" as fact. Added clarifying note for near-cause verdicts.
+- **SYSTEMIC scope + gate conflict** — SYSTEMIC verdict requires user confirmation before implementing, but gate item 6 said "never prose only." Added SYSTEMIC exception.
+- **Multi-factor AFTER block** — "AFTER block must address every factor" broke for env/config/process factors not expressible as code. Widened to "the response must address every factor."
+
 ## [1.22] - 2026-04-24
 
 ### Single-Shot Confidence Upgrades
