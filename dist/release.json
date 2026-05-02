@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
   "version": "1.23",
-  "source_commit": "bea465db574ff18c5513dc4ad44c5dd9d36d4635",
-  "source_commit_short": "bea465d",
-  "source_date": "2026-04-27",
-  "source_subject": "Release 1.23",
+  "source_commit": "17234647ec57c006f6c03f83ecac69c3141acf12",
+  "source_commit_short": "1723464",
+  "source_date": "2026-05-02",
+  "source_subject": "Codex CLI compatibility: install + update support",
   "artifact": "dist/nuclear-bug-fix.skill"
 }

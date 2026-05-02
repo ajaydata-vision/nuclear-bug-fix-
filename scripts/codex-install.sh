@@ -148,5 +148,5 @@ if not (target_dir / "SKILL.md").exists():
 
 print(f"Installed {SKILL_NAME} to {target_dir}")
 print("Restart Codex for the skill to take effect.")
-print(f"To update later: bash {target_dir}/scripts/update.sh")
+print("To update later: run scripts/update.sh inside your Codex skill directory.")
 PY

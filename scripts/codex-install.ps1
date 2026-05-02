@@ -84,7 +84,7 @@ try {
 
     Write-Host "Installed $SkillName to $ResolvedTargetDir"
     Write-Host "Restart Codex for the skill to take effect."
-    Write-Host "To update later: & `"$ResolvedTargetDir\scripts\update.ps1`""
+    Write-Host "To update later: run scripts\update.ps1 inside your Codex skill directory."
 
 } finally {
     if (Test-Path -LiteralPath $ArchivePath)  { Remove-Item -LiteralPath $ArchivePath  -Force }

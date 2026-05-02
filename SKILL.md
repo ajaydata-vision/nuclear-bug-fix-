@@ -2,7 +2,7 @@
 name: nuclear-bug-fix
 metadata:
   version: "1.23"
-  source_commit: "bea465db574ff18c5513dc4ad44c5dd9d36d4635"
+  source_commit: "17234647ec57c006f6c03f83ecac69c3141acf12"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -25,7 +25,7 @@ description: >
 
 ---
 
-## UPDATE COMMAND — `/nuclear-bug-fix update`
+## UPDATE COMMAND — `/nuclear-bug-fix update` (Claude Code) | `$nuclear-bug-fix update` (Codex)
 
 If the user invokes this skill with the argument `update`
 (i.e. types `/nuclear-bug-fix update`), do NOT run the bug-fix methodology.
