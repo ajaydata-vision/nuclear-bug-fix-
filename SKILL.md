@@ -1,8 +1,8 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.24"
-  source_commit: "6f1555b24486b379ecc51e1f591b5085edf59676"
+  version: "1.25"
+  source_commit: "fc23a771b770a2e61995bfa4d9ba6760f522ba24"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -19,6 +19,8 @@ description: >
   works locally but fails in prod, intermittent crashes, race conditions,
   bug came back after fix, any bug already looked at once.
   ALWAYS use this skill instead of a generic debugging response.
+  Also triggers for: "rocket", "fast mode", "skip routing", or when user
+  names a stack and wants immediate diagnosis without routing overhead.
 ---
 
 # ☢️ Nuclear Bug Fix
@@ -67,6 +69,68 @@ STEP 2: Report what happened
 The update script handles everything. Just run it and report the output.
 Do not proceed to the bug-fix methodology when the argument is "update".
 ```
+
+---
+
+## ROCKET COMMAND -- `/nuclear-bug-fix rocket [stack]` (Claude Code) | `$nuclear-bug-fix rocket [stack]` (Codex)
+
+If the user invokes this skill with the argument `rocket` (with or without a stack name and/or
+bug description after it), do NOT run Phase 1-2 intake and routing. Instead:
+
+```
+STEP 1: Extract the stack argument (the word immediately after "rocket")
+
+  Recognised stack aliases:
+    java, java-enterprise, spring, spring-boot  -> references/java-patterns.md
+    dotnet, .net, csharp, c#, aspnet, asp.net   -> references/dotnet-patterns.md
+    php, laravel                                 -> references/php-patterns.md
+    elixir, phoenix, oban, ecto                  -> references/elixir-patterns.md
+    react-native, rn, expo                       -> references/react-native-patterns.md
+    frontend, js, ts, javascript, typescript,
+      css, vue, angular, react, browser          -> references/frontend-patterns.md
+    backend, node, python, ruby, go, rust, api   -> references/backend-patterns.md
+    python-desktop, pyqt, qasync                 -> references/python-desktop-patterns.md
+    bridge, ipc                                  -> references/bridge-adapter-patterns.md
+    windows, frozen, pyinstaller                 -> references/windows-packaging-patterns.md
+    integration, pipeline, webhook, kafka        -> references/integration-patterns.md
+    general, universal, async, concurrency       -> references/bug-patterns.md
+    intermittent, race, flaky, heisenbug         -> references/intermittent-race-bugs.md
+
+  If no stack argument is given OR the stack is unrecognised:
+    List the aliases above and ask: "Which stack? (one word)"
+    Wait for the answer, then proceed from STEP 2.
+
+STEP 2: Load the reference file IMMEDIATELY -- before reading any bug description
+
+  Action: Read the identified reference file now. This is the first tool call.
+  Reason: Loading the reference file before the bug description ensures the
+  patterns are anchored in context before any large code pastes or log content
+  arrives. Phase 2A routing is SKIPPED -- the user has already identified the stack.
+
+STEP 3: If a bug description was included in the same message, run Phases 3-6 now
+
+  The user may have written:
+    /nuclear-bug-fix rocket java My @Transactional method isn't rolling back
+    $nuclear-bug-fix rocket php OPcache not clearing after deploy
+
+  Everything after the stack word IS the bug description. Treat it as Phase 1
+  intake and proceed directly to Phase 3 (skip Phase 2 entirely -- routing is done).
+
+STEP 4: If NO bug description was in the message, say exactly:
+
+  "[Stack] patterns loaded. Describe the bug."
+
+  Then wait. When the user responds, proceed from Phase 3 with the loaded file.
+  Do not ask any further clarifying questions -- start diagnosing immediately.
+```
+
+ROCKET MODE RULES:
+- Phase 2A routing is SKIPPED entirely. The reference file is authoritative.
+- Phase 3 through 6 run EXACTLY as normal -- no shortcuts to the diagnosis.
+- If the bug turns out to be cross-domain (e.g. Java + Kafka), co-load the second
+  file per the Phase 4 co-loading rules, exactly as in the standard flow.
+- Do NOT output a preamble or explain what rocket mode is. Load the file and go.
+
 
 ---
 

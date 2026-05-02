@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.24",
-  "source_commit": "6f1555b24486b379ecc51e1f591b5085edf59676",
-  "source_commit_short": "6f1555b",
+  "version": "1.25",
+  "source_commit": "fc23a771b770a2e61995bfa4d9ba6760f522ba24",
+  "source_commit_short": "fc23a77",
   "source_date": "2026-05-02",
-  "source_subject": "Codex install: 2 adversarial defects fixed",
+  "source_subject": "Release 1.24 \u2014 Codex CLI compatibility",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
