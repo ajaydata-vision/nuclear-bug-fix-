@@ -2,7 +2,7 @@
 name: nuclear-bug-fix
 metadata:
   version: "1.23"
-  source_commit: "34ebef1a66f34b941852a1855f0d4efc48284077"
+  source_commit: "bea465db574ff18c5513dc4ad44c5dd9d36d4635"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
   Most powerful bug-fixing skill for bugs surviving code review, careful
@@ -32,7 +32,9 @@ If the user invokes this skill with the argument `update`
 Instead, run the update check:
 
 ```
-STEP 1: Locate the update script (check both install locations)
+STEP 1: Locate the update script for the user's tool and shell
+
+  == Claude Code ==
   Bash / Git Bash / WSL:
     Personal install:  bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
     Project install:   bash .claude/skills/nuclear-bug-fix/scripts/update.sh
@@ -41,16 +43,26 @@ STEP 1: Locate the update script (check both install locations)
     Personal install:  & "$HOME\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
     Project install:   & ".\.claude\skills\nuclear-bug-fix\scripts\update.ps1"
 
-  Use the script that matches the current shell.
-  Try personal first. If the file does not exist, try project.
-  If neither exists: the skill was not installed from a directory; use manual reinstall.
+  == Codex CLI ==
+  Bash / Git Bash / WSL:
+    bash "${CODEX_HOME:-$HOME/.codex}/skills/nuclear-bug-fix/scripts/update.sh"
+
+  Windows PowerShell:
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$HOME\.codex" }
+    & "$codexHome\skills\nuclear-bug-fix\scripts\update.ps1"
+
+  The update script detects its own location automatically and updates the
+  correct install (Claude Code or Codex). Try personal first. If the file does
+  not exist, try project. If neither exists: use manual reinstall.
 
 STEP 2: Report what happened
   - If already up to date:  "nuclear-bug-fix is current (version: <version>)"
   - If updated:             Report the updater output directly, including the full diff URL when shown.
   - If error:               Show the error and the reinstall commands:
-                            macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.sh | bash
-                            Windows PS:   irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.ps1 | iex
+                            Claude Code macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.sh | bash
+                            Claude Code Windows PS:   irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/install.ps1 | iex
+                            Codex CLI macOS/Linux:    curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/codex-install.sh | bash
+                            Codex CLI Windows PS:     irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/codex-install.ps1 | iex
 
 The update script handles everything. Just run it and report the output.
 Do not proceed to the bug-fix methodology when the argument is "update".

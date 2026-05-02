@@ -249,7 +249,7 @@ try {
 
     Write-Host ""
     Write-Host "✅ Updated: $InstalledVersion → $LatestVersion"
-    Write-Host "   Restart Claude Code for the new version to take effect."
+    Write-Host "   Restart Claude Code or Codex for the new version to take effect."
 }
 finally {
     if (Test-Path -LiteralPath $TempArchive) {

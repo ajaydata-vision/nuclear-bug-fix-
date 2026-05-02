@@ -234,5 +234,5 @@ fi
 
 echo ""
 echo "✅ Updated: ${installed_version} → ${latest_version}"
-echo "   Restart Claude Code for the new version to take effect."
+echo "   Restart Claude Code or Codex for the new version to take effect."
 rm -f "${TMP}"

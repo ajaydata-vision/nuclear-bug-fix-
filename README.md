@@ -160,9 +160,30 @@ cd ~/.claude/skills/nuclear-bug-fix && ./setup
 ### Update
 
 ```bash
+# Claude Code
 bash ~/.claude/skills/nuclear-bug-fix/scripts/update.sh
+# Codex CLI
+bash "${CODEX_HOME:-$HOME/.codex}/skills/nuclear-bug-fix/scripts/update.sh"
 ```
-Or type `/nuclear-bug-fix update` in Claude Code.
+Or type `/nuclear-bug-fix update` in Claude Code, or `$nuclear-bug-fix update` in Codex.
+
+---
+
+## Codex CLI Installation
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/codex-install.sh | bash
+```
+
+**Windows PowerShell:**
+```powershell
+irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scripts/codex-install.ps1 | iex
+```
+
+Installs to `$CODEX_HOME/skills/nuclear-bug-fix/` (defaults to `~/.codex/skills/`).
+Invoke with `$nuclear-bug-fix` or let Codex trigger it automatically when your request matches the description.
+The same `SKILL.md` and all 340 patterns work identically in both Claude Code and Codex CLI.
 
 ---
 

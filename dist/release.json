@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
   "version": "1.23",
-  "source_commit": "34ebef1a66f34b941852a1855f0d4efc48284077",
-  "source_commit_short": "34ebef1",
-  "source_date": "2026-04-24",
-  "source_subject": "v1.22 adversarial review \u2014 8 defects fixed before push",
+  "source_commit": "bea465db574ff18c5513dc4ad44c5dd9d36d4635",
+  "source_commit_short": "bea465d",
+  "source_date": "2026-04-27",
+  "source_subject": "Release 1.23",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
