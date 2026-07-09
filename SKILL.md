@@ -1,7 +1,7 @@
 ---
 name: nuclear-bug-fix
 metadata:
-  version: "1.25"
+  version: "1.26"
   source_commit: "f89a372966a71d7666de381a94b66ea93ed060e2"
   repo: https://github.com/ajaydata-vision/nuclear-bug-fix-
 description: >
@@ -450,8 +450,9 @@ SCHROEDINBUG — Worked until someone read the code and saw it shouldn't.
 
 ### 2F — Contributing Factor Analysis
 
-The median production incident involves 3.5 contributing factors.
-Incidents with 5+ contributing factors take 3x longer to resolve.
+Production incidents are commonly multi-factor, not single-cause.
+The more contributing factors an incident has, the longer it takes to
+resolve if they are found one at a time instead of mapped up front.
 
 ```
 Single factor:  One line is wrong. Standard Phase 3.

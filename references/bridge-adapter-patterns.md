@@ -18,7 +18,7 @@ intelligence before modifying bridge or parser logic.
 
 ---
 
-## Pattern: Stdout protocol is polluted by debug logs
+### Pattern: Stdout protocol is polluted by debug logs
 
 **Symptom:** Bridge starts, but parent reports JSON parse errors, dropped events,
 or random protocol corruption.
@@ -57,7 +57,7 @@ stderr or a file sink. Prefix/structure all protocol frames consistently.
 
 ---
 
-## Pattern: Child process started != bridge ready
+### Pattern: Child process started != bridge ready
 
 **Symptom:** Parent says bridge is connected, but the first inbound events are
 missing. Later events work.
@@ -99,7 +99,7 @@ listener attachment.
 
 ---
 
-## Pattern: Reconnect path registers listeners more than once
+### Pattern: Reconnect path registers listeners more than once
 
 **Symptom:** Same WhatsApp/websocket event is delivered twice or more after one
 or more reconnects.
@@ -137,7 +137,7 @@ cleanly with old references disposed.
 
 ---
 
-## Pattern: Parent and child use different runtime/build assumptions
+### Pattern: Parent and child use different runtime/build assumptions
 
 **Symptom:** Bridge works in development and fails in packaged or deployed runs.
 Child starts with wrong script, wrong cwd, wrong env, or wrong version.
@@ -175,9 +175,16 @@ command.
 - Parent refuses startup if child binary/script is missing or version-mismatched
 - First handshake succeeds with the resolved packaged path
 
+**See also:** this pattern is "the resolved path points to the wrong place." If
+the resolved path is correct but the file is simply absent from the bundle
+(different failure signature — `ENOENT`/"file not found" vs. a wrong-but-existent
+path), see `references/windows-packaging-patterns.md` → "Bundled subprocess or
+helper script is missing." SKILL.md's co-loading rule loads both files together
+for exactly this ambiguity — check both before concluding which one applies.
+
 ---
 
-## Pattern: Unofficial scraper breaks because upstream provider drifted
+### Pattern: Unofficial scraper breaks because upstream provider drifted
 
 **Symptom:** Scraper suddenly returns empty results, malformed rows, or 403/429
 patterns even though local parsing code was unchanged.
@@ -218,7 +225,7 @@ working version, apply the upstream workaround, or move to a supported API.
 
 ---
 
-## Pattern: WebSocket relay emits before downstream listener is attached
+### Pattern: WebSocket relay emits before downstream listener is attached
 
 **Symptom:** Only the first event after connect disappears. Subsequent realtime
 events arrive normally.

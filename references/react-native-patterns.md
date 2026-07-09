@@ -32,11 +32,11 @@ npm ls react            # npm equivalent — multiple version entries = duplicat
 Metro-level confirmation: add `console.log(require.resolve('react'))` inside BOTH the component that works and the one that doesn't. If they print different absolute paths → two copies are loaded at runtime.
 **Fix:** Hoist to root: add to `package.json` resolutions (yarn) or `overrides` (npm). For monorepos: configure Metro `resolver.extraNodeModules` to point sub-packages at the root copy.
 
-### Pattern: Hermes engine strips console.log in production — debugging data missing
-**Symptom:** `console.log` statements visible in development build. Same logs completely absent in production / release build. No crash, no error. Business logic output appears to disappear.
-**Why:** Hermes (default JS engine since RN 0.70) strips `console.*` calls in release builds by default. This is intentional. Any debugging that relies on `console.log` in production (e.g., logging to a remote service) is silently removed at bundle time.
-**Prove:** In `metro.config.js`, check if `minifierConfig.drop_console` is set. In release `.jsbundle`, search for your log string — if absent, Hermes removed it.
-**Fix:** Use a logging library (`react-native-logs`, `@datadog/mobile-react-native`) that calls native platform logging rather than `console.*`. For temporarily preserving logs in release: set `drop_console: false` in Metro minifier config (remove before final production build).
+### Pattern: console.log "missing" in production — no dev-server sink, not actually stripped
+**Symptom:** `console.log` statements visible in the terminal during development. In production / release build, nothing appears in the terminal — looks like the logs vanished. No crash, no error.
+**Why:** Hermes does **not** strip `console.*` calls by default — Metro's minifier config (`drop_console`) defaults to `false`, so the calls still execute in release/Hermes builds. What actually changed: in development, Metro's dev server pipes `console.*` output over a WebSocket to your terminal; that dev-server bridge does not exist in a release build, so the calls run but have no visible sink. The logs are still executing — they're just not printed anywhere you're looking. (Logs ARE genuinely absent only if the project explicitly opted into stripping via Metro's `drop_console: true` or a Babel plugin like `babel-plugin-transform-remove-console` — check for that first before assuming Hermes is responsible.)
+**Prove:** `adb logcat *:S ReactNativeJS:V` (Android) or the device console in Xcode/Console.app (iOS) while running the release build and triggering the code path — the `console.log` output appears there via the native log bridge, proving it still ran. Separately, grep `metro.config.js` / `babel.config.js` for `drop_console` or `transform-remove-console` — if present and `true`/enabled, that (not Hermes) is what's removing the calls.
+**Fix:** For genuinely persistent production logging, use a logging library (`react-native-logs`, `@datadog/mobile-react-native`) that writes to native platform logging and/or a remote sink rather than relying on `console.*`, since the dev-server terminal bridge is a development-only convenience. If a `drop_console`/log-stripping plugin was intentionally added and is now in the way, disable it for the build you're debugging rather than assuming it's Hermes default behavior.
 
 ---
 
@@ -194,12 +194,14 @@ getItemLayout={(data, index) => ({
 **Fix:** Separate animations: use `useNativeDriver: true` only for `transform` and `opacity`. Use `useNativeDriver: false` for layout properties. For performant layout animations: use Reanimated 2+ `useAnimatedStyle` with layout values, or `LayoutAnimation` for simpler cases.
 
 ### Pattern: Reanimated 2/3 worklet crash — calling a JS function from the UI thread without runOnJS
-**Symptom:** App crashes with `[Reanimated] Tried to synchronously call a non-worklet function on the UI thread`. Crash location is inside a `useAnimatedGestureHandler` callback (`onActive`, `onEnd`, `onStart`) or inside `useAnimatedStyle`. **Works in development on JSC, crashes in production on Hermes** (Hermes runs worklets truly on the UI thread; JSC dev builds sometimes fall back to JS thread, masking the bug).
+**Symptom:** App crashes with `[Reanimated] Tried to synchronously call a non-worklet function on the UI thread`. Crash location is inside a `useAnimatedGestureHandler` callback (`onActive`, `onEnd`, `onStart`) or inside `useAnimatedStyle`. **Often "works" during development and only crashes in a release build** — see the note below; this is a remote-debugging artifact, not a JSC-vs-Hermes engine difference.
 **Why:** Reanimated 2/3 runs gesture-handler callbacks and `useAnimatedStyle` bodies as worklets on the UI thread. From the UI thread you can:
 - ✅ Read **primitive values** (numbers, strings, booleans) captured at worklet creation time — they are serialized into the worklet at definition time, so accessing `threshold` (a plain number prop) is **safe** with no extra wrapping.
 - ✅ Read and write `SharedValue`s via their `.value` accessor.
 - ✅ Call other worklet functions (functions with `'worklet'` directive at the top).
 - ❌ Synchronously invoke a regular JS function — including a callback prop like `onDismiss`. That triggers Reanimated's UI-thread guard and throws the "non-worklet function" error.
+
+**Why it can seem to "work" until release:** the masking variable is **remote JS debugging** (Chrome DevTools / any remote debugger attached), not JSC vs. Hermes. With remote debugging enabled, all JS — including worklets — is forced to run on the same JS thread as the rest of your app instead of the dedicated UI thread, so a synchronous JS-function call from a "worklet" never actually crosses a thread boundary and the crash is masked. Disable remote debugging (or test a release build, where it's off) to reproduce reliably. This is the same mechanism described in Category 9's Chrome Debugger pattern — see that pattern for the general form.
 
 **The most common shape of this bug** is a gesture handler that reads a primitive prop fine but then tries to call a JS callback directly:
 ```javascript
@@ -235,6 +237,8 @@ const gestureHandler = useAnimatedGestureHandler({
 - Logging via a JS-side analytics SDK: `runOnJS(analytics.track)('swiped')`.
 
 For the separate "I am reading a regular JS variable inside `useAnimatedStyle`" case (no function call involved), the fix IS to convert that JS variable to a `SharedValue` via `useSharedValue` — but that is a different pattern from the function-call crash above. Diagnose by asking: "is the offending line a *value read* or a *function call*?" Value read → `SharedValue`. Function call → `runOnJS`.
+
+**API note:** the `useAnimatedGestureHandler` + `PanGestureHandler` shown above is react-native-gesture-handler v1-style. It still runs, but v2 (the version paired with Reanimated 3 / New Architecture projects) deprecates it in favor of `Gesture.Pan().onUpdate(...).onEnd(...)` + `<GestureDetector>`. The `runOnJS`/`SharedValue` diagnosis above applies identically either way — only the gesture-registration API differs. Prefer the v2 `Gesture` API in new code.
 
 ### Pattern: Animated loop memory leak — cleanup missing in useEffect
 **Symptom:** App runs fine initially. Over time (after several screen navigations or re-mounts), memory usage grows. Animation-heavy screens show increasing memory after repeated visits.
@@ -482,8 +486,8 @@ This error fires **only** when New Architecture is enabled and the module was no
 
 To identify WHICH libraries are incompatible before hitting runtime errors:
 ```bash
-# Check React Native's official compatibility list:
-npx react-native-community-releases check  # if available
+# Check reactnative.directory — the community-maintained New Architecture
+# compatibility database — for each dependency before enabling newArchEnabled.
 
 # Manual: for each native library, check its GitHub repo:
 # Search issues for: "new architecture" OR "turbomodule" OR "JSI"

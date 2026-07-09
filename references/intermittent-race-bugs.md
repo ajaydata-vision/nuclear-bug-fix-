@@ -428,6 +428,40 @@ FIX:
 
 ---
 
+## PHASE D.5 — DETERMINISTIC REPLAY DEBUGGING (Highest Leverage for Heisenbugs)
+
+If the platform supports it, this beats every other technique in this file:
+instead of trying to make an intermittent failure reproduce again, RECORD one
+occurrence once, then REPLAY it deterministically — byte-for-byte identical
+execution, as many times as needed, with a full debugger attached and no risk
+of the observation itself changing the outcome (the classic Heisenbug problem
+this whole file exists to work around).
+
+```
+rr (Mozilla, Linux, x86/x86-64) — record and replay any process:
+  rr record ./myapp                 # run once, capture a full deterministic trace
+  rr replay                         # replay it — deterministic, rewindable, gdb-attached
+  # Inside rr replay: reverse-continue, reverse-step, reverse-next all work —
+  # you can step BACKWARD from the crash to find the exact write that caused it.
+  # Because the replay is bit-for-bit deterministic, you can set a watchpoint
+  # on a memory location and know it will trigger at the exact same point
+  # every time — something you cannot do with a live re-run of a race.
+
+Windows Time Travel Debugging (WinDbg, TTD) — same idea for Windows binaries:
+  Record via WinDbg Preview's "Time Travel Debugging" trace capture, then
+  replay with full reverse-step/reverse-continue support in the trace viewer.
+
+When this doesn't apply: rr requires Linux with specific CPU support (no
+ARM/M1 support as of this writing on stock rr; Windows/macOS need TTD or a
+platform-specific equivalent) — for unsupported platforms, fall back to
+Phase B (amplification) and Phase C (non-invasive logging) below. When it
+DOES apply, prefer it over amplification: replay debugging finds the exact
+faulting instruction/write with certainty; amplification only increases the
+probability of reproducing the symptom.
+```
+
+---
+
 ## PHASE E — RACE DETECTION TOOLS BY LANGUAGE
 
 Use automated tools BEFORE manual diagnosis. They catch what humans miss.
@@ -442,6 +476,22 @@ go run -race main.go
 # Zero false positives. Any report is a real race.
 # 2-20x overhead — run in CI, not every dev build
 # Output shows: goroutine IDs, file:line, access type (read/write)
+```
+
+### Rust — loom (exhaustive interleaving) and Miri (undefined behavior / data races)
+```bash
+# loom — model-checks ALL possible thread interleavings of a concurrent test
+# (not sampling like TSan — exhaustive, for small-scoped concurrency tests)
+# Add to Cargo.toml under [dev-dependencies]: loom = "0.7"
+# Wrap the concurrent code under test in loom::model(|| { ... });
+# loom re-runs the closure once per distinct interleaving until it exhausts
+# the state space or finds one that violates an assertion.
+
+# Miri — interpreter that detects undefined behavior, including data races,
+# by running the actual test suite under instrumentation:
+cargo +nightly miri test
+# Slower than native (interpreted), but catches UB that compiles cleanly —
+# use on the specific module under suspicion, not the whole test suite.
 ```
 
 ### C/C++ — ThreadSanitizer (TSan)
@@ -466,7 +516,9 @@ valgrind --tool=helgrind ./myapp
 # Java Flight Recorder — JDK 11+ OpenJDK and OracleJDK (UnlockCommercialFeatures removed)
 java -XX:StartFlightRecording=duration=60s,filename=race.jfr MyApp
 
-# JDK 17+ preferred: attach to running process (no restart required)
+# jcmd (available since JDK 7) attach mode — no restart required.
+# JFR itself: free/unrestricted since JDK 11 open-source; JDK 8 needed the
+# commercial flag below on Oracle JDK specifically.
 jcmd <pid> JFR.start duration=60s filename=/tmp/race.jfr
 jcmd <pid> JFR.stop
 
@@ -474,14 +526,19 @@ jcmd <pid> JFR.stop
 java -XX:+UnlockCommercialFeatures -XX:+FlightRecorder \
      -XX:StartFlightRecording=duration=60s,filename=race.jfr MyApp
 
-# JCStress — specifically for concurrency testing
-# Add to pom.xml, write stress tests
+# JCStress — specifically for concurrency testing. Add the dependency, then
+# annotate a stress test and run via the shade plugin (produces a runnable jar):
+#   <dependency><groupId>org.openjdk.jcstress</groupId><artifactId>jcstress-core</artifactId></dependency>
+#   @JCStressTest @Outcome(id = "1, 1", expect = Expect.ACCEPTABLE) class MyRaceTest { ... }
+#   mvn clean package && java -jar target/jcstress.jar
+# Output: a table of observed outcomes with counts — any outcome NOT marked
+# ACCEPTABLE that has a non-zero count is a confirmed race.
 
 # FindBugs / SpotBugs (static analysis for race patterns)
-spotbugs -html report.html myapp.jar
+spotbugs -textui -html=report.html myapp.jar
 
 # Thread dump for deadlock and hung threads (non-destructive, any JDK)
-jcmd <pid> Thread.print    # JDK 17+ preferred
+jcmd <pid> Thread.print    # available since JDK 7
 jstack -l <pid>            # classic, includes lock ownership info
 ```
 
@@ -537,7 +594,11 @@ Apply fixes in this order — least to most invasive.
 ```
 Level 1 — Atomic Operations (no lock, lowest overhead)
   Use when: single variable, simple increment/compare/swap
-  Python:   threading.Lock() on single value, or multiprocessing.Value
+  Python:   no true lock-free atomic in stdlib — the GIL makes a single
+            bytecode op (e.g. one dict/list item assignment) atomic, but
+            compound ops like `x += 1` are NOT atomic (read-modify-write is
+            3 bytecodes); use multiprocessing.Value(..., lock=True) for a
+            genuinely atomic shared counter, or see Level 2 for anything compound
   Go:       sync/atomic package
   Java:     AtomicInteger, AtomicReference, volatile
   C/C++:    std::atomic<T>

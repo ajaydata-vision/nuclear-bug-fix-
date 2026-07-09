@@ -118,19 +118,27 @@ When adding a new reference file:
 
 ## Current state snapshot
 
-- Latest release: v1.19 (commit `6ee651b` on `main`).
-- Latest self-eval: iteration 4 on v1.12, mean 94.2, all 25 cases ≥ 83.
-- Active branch: `claude/analyze-minimax-skills-jizna`.
-  - 9 deduction-killing precision edits across existing reference files
-    (commit `a418bce`).
-  - New `references/dotnet-patterns.md`, 12 categories, 37 patterns
-    (commit `33417ca`).
-  - Adversarial review of dotnet-patterns: 14 technical defects fixed
-    (commit `4d65274`).
-- Still pending on this branch:
+- Latest release: see `VERSION` at repo root (bump on every release; do not
+  hardcode a version number here — it goes stale immediately).
+- Reference files: 16, see `references/*.md`. Every file must be wired into
+  BOTH the SKILL.md Phase 2A Domain Classification table and the Reference
+  File Guide table (R6 in `docs/reference-authoring-standards.md`) — run
+  `grep -oP 'references/[a-z-]+\.md' SKILL.md | sort -u` against
+  `ls references/*.md` to check for drift before releasing.
+- Benchmark cases: see `benchmarks/cases/` (count changes often — do not
+  hardcode a number here). Domain self-evals live in `benchmarks/results/`;
+  the cross-domain mixed eval (`iteration-4-self-eval.md`) is the oldest and
+  most likely to be stale relative to newer domains (.NET has zero dedicated
+  cases as of this writing — see `benchmarks/BENCHMARK_BACKLOG.md`).
+- The `claude/analyze-minimax-skills-jizna` branch (dotnet-patterns.md,
+  9 deduction-killing edits, authoring standards, this file) is fully merged
+  into `main` — do not treat it as active/pending work.
+- Known open gaps (check `benchmarks/BENCHMARK_BACKLOG.md` and
+  `benchmarks/COVERAGE_MATRIX.md` for the current list before assuming this
+  one is up to date):
   - Benchmark cases for .NET (`DN-001..N`) — not yet written.
-  - MiniMax-AI/skills comparison analysis — deferred.
-  - Authoring standards (this file + `docs/reference-authoring-standards.md`).
+  - GraphQL and gRPC are referenced in SKILL.md's domain table but have no
+    dedicated patterns in `backend-patterns.md` / `integration-patterns.md`.
 
 ---
 

@@ -15,7 +15,7 @@ Format for every verdict:
 
 ---
 
-## Pattern: qasync event loop ownership is wrong
+### Pattern: qasync event loop ownership is wrong
 
 **Symptom:** UI shows, but awaited slot logic never resumes, or tasks behave as if
 they are scheduled on a loop that is not being pumped by Qt.
@@ -55,7 +55,7 @@ that loop only.
 
 ---
 
-## Pattern: Async Qt slot returns a coroutine that nobody awaits
+### Pattern: Async Qt slot returns a coroutine that nobody awaits
 
 **Symptom:** Button click appears to do nothing. Sometimes a warning like
 `coroutine was never awaited` appears later.
@@ -94,7 +94,7 @@ that schedules the coroutine on the running qasync loop.
 
 ---
 
-## Pattern: Blocking work runs on the UI / qasync event loop
+### Pattern: Blocking work runs on the UI / qasync event loop
 
 **Symptom:** Window freezes during email, IMAP, filesystem, SQLite, HTTP, or
 CPU-heavy work. Spinner stops animating.
@@ -135,7 +135,7 @@ thread.
 
 ---
 
-## Pattern: Cross-thread QObject / widget mutation
+### Pattern: Cross-thread QObject / widget mutation
 
 **Symptom:** Random crashes, `QObject` thread-affinity errors, or widgets update
 unreliably only under background activity.
@@ -173,7 +173,7 @@ marshal the update back to the GUI thread before touching widgets.
 
 ---
 
-## Pattern: Shutdown hangs because background tasks never cancel cleanly
+### Pattern: Shutdown hangs because background tasks never cancel cleanly
 
 **Symptom:** App window closes, but process stays alive. Or exit shows
 `Task was destroyed but it is pending!`.
@@ -214,7 +214,7 @@ their completion, and then stop the loop. Suppress only expected
 
 ---
 
-## Pattern: SQLite lock or stale state from sharing one connection across UI and background work
+### Pattern: SQLite lock or stale state from sharing one connection across UI and background work
 
 **Symptom:** Intermittent `database is locked`, missing updates, or UI shows stale
 rows after background sync.
@@ -235,7 +235,15 @@ contention or undefined state flow.
 
 **Accepted fix:** Use one async access layer with serialized writes, or separate
 connections per thread/task boundary plus a single write queue. Keep UI reads
-and background writes coordinated.
+and background writes coordinated. Two concrete SQLite-level settings that
+directly address the `database is locked` symptom, in addition to the
+architectural fix above: `PRAGMA busy_timeout = 5000;` (makes a connection
+wait up to 5s for a lock to clear instead of failing immediately — set this
+on every connection at open time) and `PRAGMA journal_mode = WAL;` (Write-Ahead
+Logging lets readers proceed concurrently with a writer instead of blocking,
+which is the more common real-world trigger than a single shared connection
+across threads — multiple *separate* connections writing concurrently without
+WAL hit this just as often).
 
 **Wrong fixes to reject:**
 - Retry blindly in a loop forever

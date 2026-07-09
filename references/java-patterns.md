@@ -354,30 +354,20 @@ Enable heap dump for heap space errors: add `-XX:+HeapDumpOnOutOfMemoryError -XX
 ```
 
 ### Pattern: Reading a thread dump — deadlock and hung thread diagnosis
+**Symptom:** App hangs, a request never returns, or CPU pegs at 100% with no clear cause in application logs.
+**Why:** The thread dump shows what every thread is actually doing right now — blocked on a lock, waiting on I/O, or spinning. Guessing from logs alone misses this; the dump is direct evidence.
 **Prove:** Capture and read the thread dump:
 ```bash
-jcmd <pid> Thread.print        # JDK 17+, preferred
-jstack -l <pid>                # classic, includes lock ownership
-kill -3 <pid>                  # SIGQUIT — dumps to stdout (non-destructive)
+jcmd <pid> Thread.print         # available since JDK 7, no restart required
+jstack -l <pid>                 # classic, includes lock ownership
+kill -3 <pid>                   # SIGQUIT — dumps to stdout (non-destructive)
 ```
 **Find PID:** `jps -l | grep YourApp`
-**Smoking gun per state:**
-- `BLOCKED (on object monitor)` with "waiting to lock" + "locked by" on same address → deadlock or contention. Owner thread is named.
-- `TIMED_WAITING` in executor threads → idle workers (normal) OR `InterruptedException` swallowed (check catch block).
-- `RUNNABLE` flood in same method → CPU bottleneck at that method.
-- Deadlock: `jstack -l` prints `Found one Java-level deadlock:` automatically.
-**Capture:**
-```bash
-jcmd <pid> Thread.print        # JDK 17+, preferred
-jstack -l <pid>                # classic, includes lock ownership
-kill -3 <pid>                  # SIGQUIT, dumps to stdout (non-destructive)
-```
-**Find PID:** `jps -l | grep YourApp`
-**Thread states:**
-- `RUNNABLE` — executing. High RUNNABLE count = CPU bottleneck.
-- `BLOCKED (on object monitor)` — waiting for `synchronized` lock. Look for "waiting to lock" + "locked by" to find the holder.
+**Thread states and what they mean:**
+- `RUNNABLE` — executing. A flood of threads `RUNNABLE` in the same method = CPU bottleneck at that method.
+- `BLOCKED (on object monitor)` — waiting for a `synchronized` lock. Look for "waiting to lock" + "locked by" on the same address to find the holder → deadlock or contention.
 - `WAITING (on object monitor)` — called `wait()`. Expected for idle workers.
-- `TIMED_WAITING` — `Thread.sleep()` or `wait(timeout)`. Expected for scheduled tasks.
+- `TIMED_WAITING` — `Thread.sleep()` or `wait(timeout)`; expected for scheduled tasks in executor threads, but if it never resolves, check for a swallowed `InterruptedException` in the catch block.
 **Deadlock:** JVM reports automatically with `jstack -l`:
 ```
 Found one Java-level deadlock:
@@ -385,6 +375,7 @@ Thread-1: waiting to lock <0x000...> (held by Thread-2)
 Thread-2: waiting to lock <0x000...> (held by Thread-1)
 ```
 **ThreadLocal leak signal:** Thread pool threads (names like `http-nio-8080-exec-`) in `RUNNABLE` state serving wrong user data → check MDC/ThreadLocal cleanup.
+**Fix:** Once the blocking thread and lock are identified from the dump, fix the actual synchronization bug (consistent lock ordering, shorter critical sections, or a non-blocking primitive) — the dump only localizes the problem, it does not fix it.
 
 ---
 
@@ -590,6 +581,25 @@ public void addItem(OrderItem item) {
 // Use this method everywhere, never manipulate items list directly
 ```
 
+### Pattern: `BigDecimal.equals()` returns false for numerically equal values
+**Symptom:** Two `BigDecimal` values that represent the same amount (e.g. from different code paths, or before/after a DB round-trip) compare as NOT equal via `.equals()`, `List.contains()`, `Set` membership, or `assertEquals` in a test — even though printing both values shows the same number. Financial reconciliation or dedup logic silently fails.
+**Why:** `BigDecimal.equals()` considers **scale** part of equality: `new BigDecimal("2.0").equals(new BigDecimal("2.00"))` is `false`, because one has scale 1 and the other scale 2 — even though they represent the same mathematical value. This is easy to miss in review because `.equals()` "looks like" standard equality and the values print identically in most contexts. A common trigger: a DB column defined as `NUMERIC(10,2)` returns scale-2 values, but a value constructed in code via `new BigDecimal(someDouble)` or `BigDecimal.valueOf(2.0)` has a different scale.
+**Prove:** Log `.scale()` on both operands right before the failing `.equals()`/`Set`/`List.contains()` call. Different scale values with the same `.toPlainString()` output confirms this pattern.
+**Fix:** Use `.compareTo() == 0` for numeric equality instead of `.equals()` — `compareTo` ignores scale. If the value is used as a `Set`/`Map` key, normalize scale first (`.setScale(2, RoundingMode.HALF_UP)`) so `hashCode()`/`equals()` behave consistently, since `compareTo`-consistent-with-`equals` is NOT guaranteed for `BigDecimal` by contract.
+```java
+// WRONG — scale-sensitive, silently fails for numerically equal values
+if (expectedAmount.equals(actualAmount)) { ... }
+
+// CORRECT — compareTo ignores scale
+if (expectedAmount.compareTo(actualAmount) == 0) { ... }
+```
+
+### Pattern: JPA entity in a `Set` "vanishes" after being persisted
+**Symptom:** An entity is added to a `HashSet<Entity>` before being saved, then after `repository.save(entity)` (or after a transaction commits), `set.contains(entity)` returns `false` even though the entity is clearly in the set when iterated, or the entity appears to "duplicate" when re-added.
+**Why:** The entity's `equals()`/`hashCode()` are generated (by Lombok `@Data`/`@EqualsAndHashCode`, or hand-written) based on the JPA-generated `id` field. Before the entity is persisted, `id` is `null`, so it hashes to one bucket; once persisted, JPA assigns the real `id`, changing the hash code. A `HashSet` computes an item's bucket at insertion time and never recomputes it — so the entity is now stored in the wrong bucket relative to its new `hashCode()`, and every subsequent `contains()`/`remove()` (which looks in the *current* hash's bucket) fails to find it.
+**Prove:** Log `entity.hashCode()` immediately before adding to the `Set` and again immediately after `save()`. A different value confirms the hash changed while the entity remained in the same `Set` instance.
+**Fix:** Never use a mutable, identity-changing field (like an auto-generated `id`) in `equals()`/`hashCode()` for entities placed in hash-based collections before persistence. Either implement `equals()`/`hashCode()` based on a natural/business key that doesn't change, or use `id` but ONLY treat two entities as equal when both have a non-null `id` (treat all-`null`-id entities as equal only to themselves via identity), and avoid mutating an object's hash-relevant fields after insertion into a `HashSet`/`HashMap` — use a `List` or re-insert after the id is assigned if a `Set` is required pre-save.
+
 ---
 
 ## CATEGORY 9 — SPRING WEBFLUX / REACTIVE
@@ -742,7 +752,7 @@ Do NOT use `allEntries = true` as the fix — it works but evicts every user on 
 **Fix:** Upgrade all dependencies to Jakarta EE 9-compatible versions. Key upgrades: Hibernate 6+, Tomcat 10+, any persistence/validation library. For libraries with no Jakarta version: keep on Spring Boot 2.x or find a replacement. Use `jakarta.servlet.*`, `jakarta.persistence.*`, `jakarta.validation.*` in your own code.
 
 ### Pattern: Spring Boot 3 @HttpExchange / HTTP Interface client returns wrong type
-**Symptom:** HTTP Interface client (new in Spring Boot 3, replaces Feign) compiles fine but returns null, wrong type, or throws `HttpClientErrorException` that was previously handled. Error handling behavior changed.
+**Symptom:** HTTP Interface client (`@HttpExchange`, a Spring-native alternative to OpenFeign introduced in Spring Boot 3 / Spring Framework 6) compiles fine but returns null, wrong type, or throws `HttpClientErrorException` that was previously handled. Error handling behavior changed after migrating from Feign.
 **Why:** Spring Boot 3's `@HttpExchange` wraps errors differently from OpenFeign. 4xx/5xx responses throw `WebClientResponseException` subclasses, not Feign's `FeignException`. Error decoder customization must use `WebClient`-level error handling, not Feign's `ErrorDecoder`.
 **Prove:** Log the full response status and body in a `WebClient` `onStatus` handler. If 4xx arrives but exception type is different from what catch blocks expect → error type mismatch between Feign and HttpExchange confirmed.
 **Fix:**
@@ -922,7 +932,7 @@ public void listen(ConsumerRecord<String, Object> record) {
 **Symptom:** After migrating to virtual threads, per-request data (MDC fields, user context, tenant ID) occasionally appears in unrelated requests. Symptom identical to the servlet singleton state pollution bug but the fix is different.
 **Why:** Virtual threads are created per-task and should not share ThreadLocals with other tasks. However: if a thread pool is reused (e.g., a bounded virtual thread executor), or if `InheritableThreadLocal` is used, child virtual threads inherit parent's state. Web frameworks that create virtual threads from a thread pool that had prior request state cause cross-contamination.
 **Prove:** Log `MDC.getCopyOfContextMap()` at the START of each request handler BEFORE setting any MDC values. If any prior request's MDC values appear at the start of a new request → ThreadLocal leak confirmed. Log `Thread.currentThread().isVirtual()` to confirm virtual threads are in use.
-**Fix:** Use `ScopedValue` (preview in Java 21, finalized in **Java 22** — JEP 464) instead of `ThreadLocal` for request-scoped state. Clear ThreadLocals explicitly in a filter before and after each request. Prefer `ThreadLocal` over `InheritableThreadLocal` to prevent child thread inheritance.
+**Fix:** Use `ScopedValue` instead of `ThreadLocal` for request-scoped state (previewed across JDK 20–24 as JEP 429/446/464/481/487, finalized without change in **JDK 25** as JEP 506 — on JDK 21–24 it requires `--enable-preview`; on JDK &lt; 21 it isn't available and `ThreadLocal` + explicit clearing is the only option). Clear ThreadLocals explicitly in a filter before and after each request. Prefer `ThreadLocal` over `InheritableThreadLocal` to prevent child thread inheritance.
 ```java
 // Correct pattern for virtual thread request context
 static final ScopedValue<RequestContext> REQUEST_CTX = ScopedValue.newInstance();

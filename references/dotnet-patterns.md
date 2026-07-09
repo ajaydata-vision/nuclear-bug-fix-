@@ -936,10 +936,13 @@ Rule: `IAsyncEnumerable` from a controller is correct only when the iterator bod
 |---|---|
 | "401 on every request" or "`[Authorize]` broken" | 1 (middleware order) |
 | "CORS blocked" / "no Access-Control-Allow-Origin" | 1 (middleware order / UseCors position) |
+| "logging/request-id/custom middleware runs twice per request" | 1 (registered twice) |
 | "`[FromBody]` parameter is null" | 2 (model binding) |
 | "DateTime parsed wrong on server" | 2 (culture / format) |
+| "validation error returns HTML page instead of JSON 400" | 2 ([ApiController] + ProblemDetails) |
 | "`A second operation was started on this context instance`" | 3 (scoped in singleton) |
 | "IOptionsMonitor vs IOptionsSnapshot" / "config not reloading" | 3 (options lifetime) |
+| "memory grows with request throughput" / "Dispose() delayed" | 3 (transient IDisposable leaks to request end) |
 | "app hangs on `.Result` / `.Wait()`" | 4 (sync-over-async deadlock) |
 | "unhandled exception crashes the app" / "async void" | 4 |
 | "requests slow under load, CPU low" | 4 (ThreadPool starvation) |
@@ -964,7 +967,7 @@ Rule: `IAsyncEnumerable` from a controller is correct only when the iterator bod
 | "SemaphoreSlim hangs forever" | 11 (Release in finally) |
 | "ConcurrentDictionary factory runs twice" | 11 (Lazy<Task<T>>) |
 | "check-then-act race" | 11 (CAS or SemaphoreSlim) |
-| "DateTime.Kind after Npgsql 7 upgrade" | 12 (UTC required) |
+| "DateTime.Kind after Npgsql 6 upgrade" | 12 (UTC required) |
 | "EF migration added NOT NULL" | 12 (NRT + migrations) |
 | "minimal API 500 after .NET 8 upgrade" | 12 (JsonSerializerContext) |
 | "`IAsyncEnumerable` returns []" | 12 (buffering / NDJSON) |

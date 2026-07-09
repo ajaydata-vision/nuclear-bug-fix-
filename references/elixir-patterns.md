@@ -258,10 +258,14 @@ end
 `changeset.errors` being non-empty while the user sees no error message is pathognomonic. The Prove output and the user experience contradict each other — that contradiction IS the bug.
 **Fix:** Always handle `{:error, changeset}` and assign the changeset to the socket:
 ```elixir
-# WRONG — only handles success, drops error silently
+# WRONG — case has a catch-all that silently drops the error, no crash, no log
 def handle_event("save", params, socket) do
-  {:ok, _user} = MyApp.Accounts.create_user(params)  # crashes on error, doesn't surface it
-  {:noreply, push_navigate(socket, to: ~p"/users")}
+  case MyApp.Accounts.create_user(params) do
+    {:ok, _user} ->
+      {:noreply, push_navigate(socket, to: ~p"/users")}
+    _ ->
+      {:noreply, socket}  # {:error, changeset} falls through here — errors discarded
+  end
 end
 
 # CORRECT — error branch assigns changeset back to socket for display
@@ -274,7 +278,7 @@ def handle_event("save", params, socket) do
   end
 end
 ```
-**Dead giveaway:** `{:ok, _} = Context.create_something(params)` in a `handle_event/3` — this crashes on error (which surfaces in logs) or is a pin operator against a literal that silently mismatches.
+**Dead giveaway:** a `case`/`with` catch-all clause (`_ ->` or `error -> {:noreply, socket}`) below the `{:ok, _}` branch, with no log statement inside it — that clause is where the errors go to die. A related but DIFFERENT mistake, `{:ok, _user} = MyApp.Accounts.create_user(params)`, is not silent: it raises `MatchError` on `{:error, _}`, which LiveView logs and recovers from via a socket remount — annoying and visible in logs, but not the silent-failure mechanism this pattern describes. Don't conflate the two when reading logs: a `MatchError` in the log means you're looking at the crash variant, not this one.
 
 ---
 
@@ -359,50 +363,48 @@ end
 
 ---
 
-### Pattern: LiveView `assign_async` stale closure — async result always shows initial or stale value
-**Symptom:** `assign_async` is used to load data asynchronously. The data loads but always shows an old value — a user ID, permission scope, or tenant that belonged to the previous navigation state. The async task itself runs (the `{:ok, %{...}}` is returned). But the fetched data is for the wrong context. Navigating to a different record or user shows stale data from the previous one.
-**Why:** Elixir closures capture the value of **variables** at the moment the closure is defined — not the value of `socket.assigns` at execution time. The bug occurs in `handle_params/3`: when the user navigates to a new record, `handle_params` is called with new params and triggers `assign_async`. But if the closure references `socket.assigns.current_scope` directly instead of an extracted local variable, the closure captures the socket from `handle_params`'s parameter — which may be the *old* socket before the new assigns were applied. The async task then fetches data for the old scope.
-**Prove:** Add inspection inside the `assign_async` closure in `handle_params/3` to compare captured vs expected values:
+### Pattern: LiveView `assign_async` out-of-order completion — rapid navigation shows stale data
+**Symptom:** `assign_async` is used to load data asynchronously. The data loads but sometimes shows an old value — a user ID, permission scope, or tenant that belonged to the previous navigation state. Each async task itself runs correctly for the scope it was started with (no bug inside the closure). Rapid navigation (e.g. `/items/1` then quickly `/items/2`) intermittently shows item 1's data on the `/items/2` page.
+**Why:** This is NOT a stale-closure bug — in Elixir, `socket = assign(socket, :scope, ...)` rebinds `socket` before any `fn -> ... end` literal below it is created, so a closure written after that rebinding already captures the updated value; extracting the value into a local variable first changes nothing observable. The real mechanism is a **race between two concurrently running async tasks**: `handle_params/3` fires for `/items/1`, starts an async fetch, then fires again almost immediately for `/items/2`, starting a second async fetch under the same assign key (`:data`). `assign_async` does not guarantee completion order — if the `/items/1` fetch is slower (cold cache, larger payload, network jitter) it can resolve and overwrite `:data` *after* the `/items/2` fetch already completed, leaving the older item's data on screen with no error.
+**Prove:** Tag each async task with the id it was started for, and log both the id it was started with and the id current at the moment it resolves:
 ```elixir
 def handle_params(%{"id" => id}, _uri, socket) do
-  # Extract BEFORE any socket update — this is what the closure will capture
-  old_scope_id = socket.assigns.scope.id
-  IO.inspect(old_scope_id, label: "[ASYNC-CLOSURE-PROVE] scope.id at closure definition")
-
-  # Update socket with new scope
-  socket = assign(socket, :scope, MyApp.get_scope(id))
-
+  IO.inspect(id, label: "[ASYNC-RACE-PROVE] task started for id")
   {:noreply,
    assign_async(socket, :data, fn ->
-     # This runs asynchronously — what scope.id does it use?
-     IO.inspect(old_scope_id, label: "[ASYNC-CLOSURE-PROVE] scope.id INSIDE closure")
-     # If old_scope_id ≠ id (the new param) → closure is fetching for the WRONG scope
-     {:ok, %{data: MyApp.fetch(old_scope_id)}}
+     result = MyApp.fetch(id)
+     IO.inspect({id, socket.assigns[:current_id]}, label: "[ASYNC-RACE-PROVE] {started_for, current_id when resolved}")
+     {:ok, %{data: result}}
    end)}
 end
 # Trigger by navigating: /items/1 then /items/2 quickly
-# If "[INSIDE closure] scope.id = 1" when you navigated to /items/2 → stale capture confirmed
+# A resolve log where started_for != current_id, followed by :data showing started_for's data
+# on the current_id page → out-of-order completion confirmed.
 ```
-`old_scope_id` inside the closure differing from the current navigation target is pathognomonic.
-**Fix:** Extract the value you need *after* the socket update, then pass it into the closure:
+**Fix:** Guard the assign on completion — only apply the result if it still matches the current navigation target; stale results are discarded instead of overwriting fresher data:
 ```elixir
-# WRONG — closure captures socket from handle_params param (may be pre-update socket)
+# WRONG — last task to resolve wins, regardless of which page is current
 def handle_params(%{"id" => id}, _uri, socket) do
-  socket = assign(socket, :scope, MyApp.get_scope(id))
+  {:noreply,
+   assign_async(socket, :data, fn -> {:ok, %{data: MyApp.fetch(id)}} end)}
+end
+
+# CORRECT — tag the result with the id it was fetched for; ignore it if the socket
+# has since moved on to a different id
+def handle_params(%{"id" => id}, _uri, socket) do
+  socket = assign(socket, :current_id, id)
   {:noreply,
    assign_async(socket, :data, fn ->
-     {:ok, %{data: MyApp.fetch(socket.assigns.scope.id)}}  # captures old socket, not updated one
+     {:ok, %{data: {id, MyApp.fetch(id)}}}
    end)}
 end
 
-# CORRECT — extract from the UPDATED socket, then close over the local variable
-def handle_params(%{"id" => id}, _uri, socket) do
-  socket = assign(socket, :scope, MyApp.get_scope(id))
-  scope_id = socket.assigns.scope.id  # extracted from UPDATED socket
-  {:noreply,
-   assign_async(socket, :data, fn ->
-     {:ok, %{data: MyApp.fetch(scope_id)}}  # local variable — correct value
-   end)}
+def handle_async(:data, {:ok, %{data: {fetched_id, result}}}, socket) do
+  if fetched_id == socket.assigns.current_id do
+    {:noreply, assign(socket, :data, AsyncResult.ok(result))}
+  else
+    {:noreply, socket}  # stale result for a navigation target we've since left — discard
+  end
 end
 ```
 
@@ -752,5 +754,24 @@ scope "/admin", MyAppWeb do
 end
 ```
 After the fix: `curl -I http://localhost:4000/admin/reports` should return HTTP 302 (redirect to login), not HTTP 200.
+
+### Pattern: Env var read in `config.exs` is baked in at compile time — release ignores runtime env
+**Symptom:** App works correctly with `mix phx.server` / `iex -S mix`. After building a `mix release` and running it (or deploying it, e.g. to a container), the app connects to the wrong database, uses the wrong `SECRET_KEY_BASE`, or otherwise behaves as if an environment variable set at deploy/runtime is being ignored — even though `echo $DATABASE_URL` on the running host shows the correct value.
+**Why:** `config/config.exs` (and `config/prod.exs` etc., loaded via `import_config` from `config.exs`) is evaluated at **compile/release-build time**, not when the release starts. Any `System.get_env("DATABASE_URL")` call inside `config.exs` reads the environment of the machine that BUILT the release — which is frequently a different machine/container than the one that RUNS it (a CI build image vs. a production container, for example). The value gets compiled into the release artifact and does not change when the runtime environment changes.
+**Prove:** Grep for `System.get_env` inside `config/config.exs`, `config/prod.exs`, or any file that isn't `config/runtime.exs`. Any hit there is baked in at build time. Confirm by comparing the value logged at application start (`Application.get_env(:my_app, MyApp.Repo)[:url]`) against the actual `$DATABASE_URL` on the running host — a mismatch confirms the stale, build-time-baked value.
+**Fix:** Move all environment-dependent configuration to `config/runtime.exs`, which Elixir releases evaluate at BOOT time (every time the release starts), not at build time:
+```elixir
+# config/config.exs — WRONG location for env-var-dependent config in a release
+config :my_app, MyApp.Repo, url: System.get_env("DATABASE_URL")
+
+# config/runtime.exs — CORRECT: evaluated at release boot, reads the actual runtime env
+import Config
+
+if config_env() == :prod do
+  database_url = System.fetch_env!("DATABASE_URL")  # fetch_env! crashes loudly if missing — good
+  config :my_app, MyApp.Repo, url: database_url
+end
+```
+**Do NOT:** "fix" this by setting the env var on the BUILD machine to match production — that's fragile and defeats the purpose of a runtime-configurable release; the fix is moving the read to `runtime.exs`, not matching build/runtime environments.
 **Dead giveaway:** Two `scope "/admin"` blocks with different `pipe_through` configurations. Routes accidentally placed in the lower-privilege scope.
 

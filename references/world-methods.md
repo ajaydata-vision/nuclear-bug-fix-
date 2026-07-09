@@ -1,23 +1,30 @@
 # World's Best Debugging Methods
 
-Research-backed methodologies that engineers worldwide swear by.
-Synthesized from: David Agans' 9 Rules, Google SRE, NASA JPL practices,
-Heisenbug taxonomy, 5 Whys (Toyota), Fishbone/Ishikawa, Fault Tree Analysis.
+Established debugging methodologies, synthesized for AI-assisted diagnosis.
+Sources: David Agans' *Debugging: The 9 Indispensable Rules* (hardware/software
+debugging heuristics), Google SRE postmortem practice (sre.google), the
+Bohrbug/Heisenbug/Mandelbug/Schroedinbug taxonomy (Bruce Lindsay et al.,
+adopted widely in fault-tolerant systems literature), 5 Whys (Toyota
+Production System, adopted by Google SRE), Fishbone/Ishikawa diagrams
+(Kaoru Ishikawa), Fault Tree Analysis (Bell Labs, 1962), and hypothesis-driven
+fault injection inspired by Chaos Engineering practice (Netflix/Basiri et al.,
+*Principles of Chaos Engineering*).
 
 ---
 
 ## METHOD 1 — AGANS' 9 RULES (The Debugging Bible)
 
-David Agans' rules are considered the most universally applicable debugging methodology.
-Used by hardware and software engineers across NASA, military, and commercial systems.
-When engineers who debugged fast were studied, they all followed these rules intuitively.
+David Agans' rules are a widely-cited, practical debugging heuristic drawn
+from his experience debugging hardware and software systems. They are
+paraphrased and adapted here, not quoted verbatim from the book.
 
 ### Rule 1: Understand the System
 Before debugging, you must understand what the system is SUPPOSED to do.
 If you don't understand a part of the system — that's where the bug is.
 ```
 Read the docs. Read the source. Read the RFC. Know the intended design.
-"If you don't understand it when you design it, you're more likely to mess up."
+Agans' framing: if you don't understand a part of the system when you
+design or read it, you are more likely to misjudge how it fails.
 The part you skip reading is always where the bug hides.
 ```
 
@@ -36,7 +43,8 @@ Never throw away a debugging tool: The thing that helped you repro is gold.
 ### Rule 3: Quit Thinking and Look
 The most violated rule. Engineers theorize when they should observe.
 ```
-"Too many try to fix things based on a guess instead of gathering data."
+Agans' framing: too many engineers try to fix things based on a guess
+instead of gathering data.
 See the failure directly. Watch it happen. Don't assume you know what happens.
 See the details: The exact error, the exact value, the exact line.
 Build instrumentation in: Add logging before you need it.
@@ -320,12 +328,18 @@ Blameless principle:
   Blame hides information. Blameless postmortems surface it.
   People tell you what really happened when they don't fear punishment.
 
-5 elements of a complete postmortem:
+Elements of a complete postmortem (per Google's SRE postmortem template):
   1. Summary and impact (what broke, for how long, how many affected)
-  2. Timeline (sequence of events, including discovery and response)
-  3. Root cause (from 5 Whys — systemic, not superficial)
-  4. Contributing factors (median = 3.5 per incident)
-  5. Action items with owners and deadlines (prevent recurrence)
+  2. Trigger (the specific event that set off the incident — deploy, config
+     change, traffic spike, dependency failure)
+  3. Timeline (sequence of events, including discovery and response)
+  4. Detection (how the incident was found — alert, user report, dashboard —
+     and how long that took; slow detection is itself an action item)
+  5. Root cause (from 5 Whys — systemic, not superficial)
+  6. Contributing factors (production incidents are commonly multi-factor —
+     list every condition that had to hold for the failure to occur, not
+     just the single triggering one)
+  7. Action items with owners and deadlines (prevent recurrence)
 
 Minimum viable postmortem for any bug taking > 1 hour:
   ROOT CAUSE (from 5 Whys):
@@ -336,9 +350,17 @@ Minimum viable postmortem for any bug taking > 1 hour:
 
 ---
 
-## METHOD 7 — CHAOS ENGINEERING / HYPOTHESIS TESTING
+## METHOD 7 — HYPOTHESIS-DRIVEN FAULT INJECTION (Chaos Engineering principles, applied locally)
 
-For bugs that are intermittent or hard to reproduce:
+For bugs that are intermittent or hard to reproduce.
+
+Real Chaos Engineering (Netflix's *Principles of Chaos Engineering*) runs
+continuously against production, with two disciplines this method borrows
+in spirit but does not require at debugging scale:
+- **Steady-state hypothesis** — define the normal, healthy behavior first,
+  so a deviation during the experiment is unambiguous.
+- **Blast-radius minimization** — run the smallest experiment that could
+  falsify the hypothesis; never inject faults broader than needed to test it.
 
 ```
 Hypothesis testing framework:
@@ -351,25 +373,41 @@ Hypothesis testing framework:
 Never fix before proving the hypothesis.
 A fix that doesn't address the confirmed cause is a guess.
 
-Chaos injection for intermittent bugs:
+Fault injection for intermittent bugs (start with the smallest blast
+radius that can falsify the hypothesis — a single request/instance/thread,
+not the whole system):
   Add artificial delay at suspected timing gap → does it reproduce?
   Add artificial load → does it reproduce?
   Starve resource (memory, connections) → does it reproduce?
   Force specific execution order → does it reproduce?
   If YES to any: you've found the uncontrolled condition.
+
+Named tools instead of ad hoc delay code:
+  Network faults:   toxiproxy (proxy-level latency/timeout/bandwidth),
+                     Linux `tc`/`netem` (kernel-level packet delay/loss/reorder),
+                     Docker: pumba (container-level network/stress faults)
+  Process faults:    kill -STOP/-CONT to freeze a process mid-operation
+                     and expose timing assumptions
 ```
 
 ---
 
-## KEY INSIGHTS FROM RESEARCH
+## KEY INSIGHTS
 
-1. **Developers with structured debugging strategies resolve issues 40–60% faster** than those who approach problems reactively.
+1. **A structured debugging strategy beats reactive guessing.** Every methodology
+   above shares one trait: hypothesize → gather evidence → eliminate → verify,
+   in that order, instead of guess → patch → hope. (No specific speedup
+   percentage is cited here — no reliably sourced figure was found for one;
+   don't state a precise number as fact without a source.)
 
 2. **The part of the system you don't understand is where the bug is.** Not Murphy's Law — if you didn't understand it when designing, you likely got it wrong.
 
 3. **Stimulate, don't simulate.** A bug reproduced with fake conditions is not the real bug. The fix will not hold.
 
-4. **The median production incident has 3.5 contributing factors.** Fixing one factor may not fix the bug.
+4. **Production incidents are commonly multi-factor.** Treat "one root cause" as
+   the exception, not the default — map every contributing factor before
+   declaring the incident fixed. (No specific average-factor-count is cited
+   here — don't state a precise number as fact without a source.)
 
 5. **"If you didn't fix it, it ain't fixed."** The bug must fail under old conditions and not fail after the fix — under identical conditions.
 

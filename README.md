@@ -42,24 +42,26 @@ It was born from real production debugging sessions where standard code review, 
 
 ## 📊 Benchmark Results
 
-Scored against 161 real-world bug cases across 13 domains:
+178 curated benchmark cases across 20+ domains (`benchmarks/cases/`), each graded against
+a ground-truth `evaluator.md`. Self-eval means by domain, most recent run per domain:
 
-| Metric | Score |
-|---|---|
-| **Mean score** | **94.2 / 100** |
-| Cases scoring 85+ | 25 / 25 (100%) |
-| Single-shot HIGH confidence rate | 96% |
+| Domain | Patterns | Cases | Mean |
+|---|---:|---:|---:|
+| Java Enterprise (Servlet/JSP/Spring/Kafka/Loom) | 49 | 27 | 96.9 |
+| React Native (Metro/Navigation/Reanimated/Expo) | 26 | 5 | 96.2 |
+| Frontend JS/TS (React/Vue/vanilla/async/CSS) | 53 | 23 | 94.7 |
+| PHP (Laravel + plain PHP) | 45 | 18 | 94.6 |
+| Elixir / Phoenix / OTP / Oban | 15 | 18 | 94.3 |
+| Kafka / Messaging | — | 3 | 92.3 |
+| Backend, Integration, Mobile | 32–38 | 20–23 | 91–95 |
+| .NET / ASP.NET Core | 37 | 0 (pending) | — |
 
-**By domain:**
-
-| Domain | Patterns | Mean |
-|---|---:|---:|
-| Java Enterprise (Servlet/JSP/Spring/Kafka/Loom) | 49 | 96.9 |
-| React Native (Metro/Navigation/Reanimated/Expo) | 26 | 96.2 |
-| Frontend JS/TS (React/Vue/vanilla/async/CSS) | 51 | 94.7 |
-| Kafka / Messaging | — | 92.3 |
-| PHP (Laravel + plain PHP) | 45 | 94.6 |
-| Backend, Integration, Mobile | 38–45 | 91–95 |
+Mixed 25-case cross-domain self-eval (`benchmarks/results/iteration-4-self-eval.md`,
+last run against v1.12): **94.2 / 100 mean, 25/25 passing (85+), 96% single-shot HIGH
+confidence.** Domain-specific self-evals run since then (PHP, Elixir) hold the same band.
+.NET coverage shipped in v1.20 with 9 deduction-killing precision edits estimated at
++2.9 to the mixed mean, but has no dedicated benchmark cases yet — see
+`benchmarks/BENCHMARK_BACKLOG.md`.
 
 ---
 
@@ -67,12 +69,14 @@ Scored against 161 real-world bug cases across 13 domains:
 
 ```
 nuclear-bug-fix/
-├── SKILL.md                      # Core methodology — 6 phases, DDx gate, 35 ironclad rules
-├── references/                   # 14 reference files — 288 patterns (100% Prove coverage)
+├── SKILL.md                      # Core methodology — 6 phases, DDx gate, 42 ironclad rules
+├── references/                   # 16 reference files — 366 patterns (100% Prove coverage)
 │   ├── java-patterns.md          # 49 patterns: Servlet/JSP/NIO/Threading/JVM/Spring/Kafka/Loom
 │   ├── frontend-patterns.md      # 53 patterns: React/Vue/Angular/vanilla JS/CSS/async/TypeScript
 │   ├── react-native-patterns.md  # 26 patterns: Metro/Navigation/FlatList/Reanimated/Expo/perms
 │   ├── php-patterns.md           # 45 patterns: Execution model/OPcache/type-system/Laravel/PHP-FPM/PDO
+│   ├── dotnet-patterns.md        # 37 patterns: Middleware/DI/EF Core/System.Text.Json/Kestrel/IIS
+│   ├── elixir-patterns.md        # 15 patterns: GenServer/OTP/LiveView/Ecto/Oban/PubSub
 │   ├── backend-patterns.md       # 38 patterns: API/auth/DB/jobs/session/rate-limit/security
 │   ├── integration-patterns.md   # 32 patterns: webhooks/queues/microservices/ETL/K8s/CI-CD
 │   ├── bug-patterns.md           # 45 patterns: async/types/env/caching/memory — any stack
@@ -83,14 +87,14 @@ nuclear-bug-fix/
 │   ├── bridge-adapter-patterns.md
 │   ├── windows-packaging-patterns.md
 │   └── world-methods.md
-├── benchmarks/                   # 161 benchmark cases across 13 domains
+├── benchmarks/                   # 178 benchmark cases across 20+ domains
 └── dist/
     ├── nuclear-bug-fix.skill     # Packaged release artifact
     └── release.json              # Release manifest
 ```
 
-**Current release:** `1.16` · **Release date:** `2026-04-05`  
-**Total patterns:** 288 · **All with targeted Prove sections** · **100% Prove coverage**
+**Current release:** see `VERSION` (updated every release — check `dist/release.json` for the exact packaged commit)  
+**Total patterns:** 366 · **All with targeted Prove sections** · **100% Prove coverage**
 
 ---
 
@@ -129,6 +133,10 @@ Borrowed from medical differential diagnosis and the CIA's Analysis of Competing
 **🐍 Python Desktop / Bridge / Packaged** — PyQt6/qasync, Baileys-style bridges, PyInstaller frozen runtime
 
 **🐘 PHP** — OPcache stale bytecode, loose comparison traps (`==` vs `===`, `empty()`, `in_array()`), Laravel (Eloquent N+1, queue silent fail, service container, config cache, middleware, events), PHP-FPM exhaustion, PDO ERRMODE_SILENT, transaction not committed, charset mismatch, CLI/FPM version split, `.env` not loaded in cron
+
+**🟣 .NET / ASP.NET Core** — Middleware pipeline ordering (auth/CORS), model binding & validation, DI lifetimes (scoped-in-singleton, IOptions), async/await deadlocks + ThreadPool starvation, HttpClient lifecycle (port exhaustion, DNS, timeouts), EF Core change tracking/N+1/transactions/concurrency, System.Text.Json (case sensitivity, cycles, JsonElement lifetime), Kestrel/IIS/reverse proxy, concurrency primitives, .NET version migration gotchas
+
+**💧 Elixir / Phoenix** — GenServer deadlocks and state contamination, LiveView silent form save/double mount/PubSub duplicates, Ecto N+1/Multi rollback/constraint races, Oban job silent no-ops, Phoenix Plug auth bypass
 
 **🔬 Universal** — Race conditions, Heisenbugs, Mandelbugs, deadlocks, type coercion, timezone bugs, environment mismatch, memory leaks
 
@@ -183,7 +191,7 @@ irm https://raw.githubusercontent.com/ajaydata-vision/nuclear-bug-fix-/main/scri
 
 Installs to `$CODEX_HOME/skills/nuclear-bug-fix/` (defaults to `~/.codex/skills/`).
 Invoke with `$nuclear-bug-fix` or let Codex trigger it automatically when your request matches the description.
-The same `SKILL.md` and all 340 patterns work identically in both Claude Code and Codex CLI.
+The same `SKILL.md` and all 366 patterns work identically in both Claude Code and Codex CLI.
 
 ---
 
@@ -220,16 +228,17 @@ PHASE 6 — ESCALATION    If fix failed: 5-step loop. Never same approach twice.
 
 ---
 
-## 🧪 v1.13 Status
+## 🧪 Status
 
 | Check | Status |
 |---|---|
-| 6 phases, DDx Gate, 35 rules | ✅ |
-| 13 reference files, 241 patterns, 100% Prove coverage | ✅ |
-| 161 benchmark cases, all 3 files per case | ✅ |
-| Benchmark score: 94.2 / 100 mean | ✅ |
+| 6 phases, DDx Gate, Final Output Gate, 42 ironclad rules | ✅ |
+| 16 reference files, 366 patterns, 100% Prove coverage | ✅ |
+| 178 benchmark cases (`prompt.md` + `evaluator.md` + `verify.md` each) | ✅ |
+| Domain self-eval band: 92.3–96.9 / 100 mean (see Benchmark Results above) | ✅ |
 | Release manifest ↔ archive version aligned | ✅ |
-| `/nuclear-bug-fix update` delivers v1.13 | ✅ |
+| `/nuclear-bug-fix update` and `/nuclear-bug-fix rocket` both live | ✅ |
+| Claude Code + Codex CLI install paths | ✅ |
 
 ---
 

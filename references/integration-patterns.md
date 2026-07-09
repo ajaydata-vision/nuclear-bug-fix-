@@ -63,7 +63,7 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Symptom:** Same message processed twice. Downstream effects happen twice.
 **Why:** At-least-once delivery semantics. Consumer crashed after processing but before ACK. Network issue caused producer to retry.
 **Prove:** Log message ID at processing start. Look for same ID appearing twice.
-**Fix:** Implement idempotent consumers. Store processed message IDs. Use exactly-once semantics if broker supports it (Kafka transactions).
+**Fix:** Implement idempotent consumers — this is the general fix and is required regardless of broker features. Kafka transactions (`isolation.level=read_committed` + transactional producer) give exactly-once semantics only for Kafka-internal read-process-write pipelines (consume from topic A, produce to topic B, atomically). They do NOT make external side effects — a DB write, an email send, a third-party API call — exactly-once; those still need the idempotent-consumer pattern (store processed message IDs, dedupe on that key) regardless of Kafka transaction usage.
 
 ### Pattern: Message ordering violated
 **Symptom:** Events processed out of sequence. State inconsistent.
@@ -71,9 +71,42 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Prove:** Log message offset/sequence and processing timestamp. Is processing order matching publish order?
 **Fix:** Use partition key = entity ID (all messages for same entity go to same partition). Ensure single consumer per partition.
 
+### Pattern: DB write succeeds, event never published (the dual-write problem)
+**Symptom:** A service commits a database write, then crashes, redeploys, or hits a network blip before publishing the corresponding event/message. The DB and the message stream permanently disagree — downstream consumers never learn about a change that definitely happened. No error is logged at the point of loss; the write itself succeeded.
+**Why:** Writing to the database and publishing to the message broker are two separate network calls with no shared transaction. There is no atomic way to "commit this row AND publish this message" across two different systems. Whichever order they're called in, a crash between the two calls loses one side. This is distinct from the Saga pattern (Category 7) — Sagas coordinate multi-step business transactions across services; this is the more fundamental problem of a single service's write and its own notification falling out of sync.
+**Prove:** Compare DB row count/last-modified for an entity against the corresponding published-event count over the same time window. A gap — more DB changes than events — confirms lost publishes. Check deploy/restart timestamps against the gap window; crashes during a deploy are the most common trigger.
+**Fix — Transactional Outbox pattern:** write the event to an `outbox` table in the SAME database transaction as the business write (this is atomic — it's one transaction, one database), then a separate relay process/CDC tool (Debezium, or a simple polling worker) reads the outbox table and publishes to the broker, marking rows as sent:
+```sql
+BEGIN;
+  UPDATE orders SET status = 'paid' WHERE id = $1;
+  INSERT INTO outbox (aggregate_id, event_type, payload, created_at)
+  VALUES ($1, 'OrderPaid', $2, now());
+COMMIT;
+-- A relay process polls `outbox WHERE published_at IS NULL`, publishes to the
+-- broker, then marks published_at. If the relay crashes after publish but
+-- before marking, the event may publish twice — downstream consumers must
+-- still be idempotent (Category 2's duplicate-message pattern applies).
+```
+**Do NOT:** try to solve this with a longer transaction that includes the broker publish — most message brokers are not transactional participants with your RDBMS, and even where XA/2PC is technically possible it is operationally fragile and rarely worth the complexity compared to the outbox pattern.
+
 ---
 
 ## CATEGORY 3 — MICROSERVICE COMMUNICATION
+
+### Pattern: gRPC call hangs or fails under load — no deadline propagated
+**Symptom:** A chain of gRPC service calls (A → B → C) occasionally hangs for a long time, or fails with `DEADLINE_EXCEEDED` or `UNAVAILABLE` only under load or when one downstream service is slow. Individual services look healthy in isolation.
+**Why:** Each gRPC call in the chain was given its own independent timeout/deadline instead of propagating the REMAINING deadline from the incoming call. Service A gives itself 10s, calls B with a fresh 10s deadline, which calls C with another fresh 10s deadline — the caller-facing operation can now take up to 30s even though the caller only waited 10s before giving up, and A's own client-side timeout fires while B and C keep working on an already-abandoned request (wasted work, connection/thread pool pressure under load).
+**Prove:** Log the deadline/remaining-time at the entry of each service in the chain. If each service logs a fresh full timeout instead of a shrinking remaining budget, deadlines are not being propagated. `UNAVAILABLE` appearing at A while B/C show no error at all is a signature of A's own timeout firing before B/C responded — not a real B/C failure.
+**Fix:** Propagate the caller's remaining deadline through the whole call chain instead of giving every hop a fresh timeout:
+```go
+// Go — derive downstream context from the incoming context's deadline,
+// don't create an independent timeout at each hop
+func (s *serviceA) Handle(ctx context.Context, req *pb.Request) (*pb.Response, error) {
+    // ctx already carries the caller's deadline — pass it straight through
+    return s.bClient.Call(ctx, req) // NOT context.WithTimeout(context.Background(), 10*time.Second)
+}
+```
+**Do NOT:** give each service a longer local timeout "to be safe" — that makes the problem worse (more wasted work on requests the original caller already gave up on) rather than fixing propagation.
 
 ### Pattern: Service call succeeds, data wrong or missing
 **Symptom:** HTTP 200 from downstream service. Response body doesn't match expected contract.
@@ -247,6 +280,8 @@ async def readiness():
     return {"ready": True}
 ```
 **Key rule:** `/health/live` (liveness) = "is the process alive?" — 200 if event loop running. `/health/ready` (readiness) = "can this pod serve real traffic?" — only 200 when ALL dependencies respond. Never use the same endpoint for both.
+
+**Caveat — don't overcorrect into a correlated-failure outage:** if the readiness check pings a *shared* dependency (a Redis/Postgres instance used by every pod in the deployment) and that dependency has a transient blip, every pod fails readiness **simultaneously**. Kubernetes then pulls the entire Service's endpoints, and a brief, partial backend issue becomes a total outage — even for request paths that don't touch that dependency, or that could be served in a degraded mode. For dependencies shared across the whole deployment, consider: checking only per-instance-critical dependencies in readiness (not every shared dependency), a short grace period / failure-count threshold before flipping to not-ready, or explicitly serving degraded responses instead of failing readiness outright.
 
 ### Pattern: Kubernetes pod never becomes ready (readiness probe misconfigured)
 

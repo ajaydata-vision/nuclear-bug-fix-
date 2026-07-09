@@ -37,6 +37,29 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Prove:** Check server logs vs gateway timeout config. Log operation duration.
 **Fix:** Increase timeout for long operations. Or make async: accept request, return job ID, process in background, client polls.
 
+### Pattern: GraphQL query returns 200 with correct shape but is extremely slow — resolver-level N+1
+**Symptom:** A GraphQL query for a list with a nested field (e.g. `{ posts { id author { name } } }`) is fast for 1 post, slow for 100 posts, and the slowdown is linear in list size. The query itself, and its returned JSON shape, look completely correct — this is not a wrong-data bug, it's a hidden-cost bug.
+**Why:** GraphQL resolvers run independently per field per object by default. The `posts` resolver runs one query to get 100 posts; the `author` resolver then runs once PER post (100 separate queries) because each object in the list is resolved independently with no batching. This is the ORM N+1 pattern (Category 3) but hidden one layer deeper — REST/ORM N+1 is visible by reading the endpoint's code, GraphQL N+1 is invisible in the resolver code because each resolver function looks correct in isolation; the multiplication only happens due to how the GraphQL executor calls them.
+**Prove:** Log a query counter (or use APM/tracing) for the duration of a single GraphQL request. Query count scaling linearly with the size of the requested list (not constant) confirms resolver-level N+1. Most GraphQL server frameworks also expose per-resolver timing in their tracing extension — look for one resolver name repeated N times.
+**Fix:** Use a batching/caching loader (DataLoader in JS, or the equivalent in your GraphQL server) keyed by the field being resolved, so per-object resolver calls within the same request tick are collected and issued as one batched query:
+```js
+// DataLoader batches all author lookups requested in the same tick into one query
+const authorLoader = new DataLoader(async (authorIds) => {
+  const authors = await db.author.findMany({ where: { id: { in: authorIds } } })
+  const byId = new Map(authors.map(a => [a.id, a]))
+  return authorIds.map(id => byId.get(id))  // must return in the same order as input
+})
+
+const resolvers = {
+  Post: {
+    author: (post, _args, context) => context.authorLoader.load(post.authorId)
+  }
+}
+// authorLoader must be created PER-REQUEST (in context), not module-level —
+// a shared loader across requests leaks cached data between users.
+```
+**Do NOT:** create the DataLoader instance at module scope and share it across requests — that caches one user's data and serves it to the next request.
+
 ---
 
 ## CATEGORY 2 — AUTHENTICATION & AUTHORIZATION
@@ -206,6 +229,7 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Why:** Endpoint not publicly accessible. Wrong URL registered. Signature validation rejecting all webhooks. SSL issue. Endpoint returning non-2xx (external service stops retrying).
 **Prove:** Check external service's webhook delivery logs — is it showing success or failure? What response code is it getting?
 **Fix:** Ensure endpoint is publicly accessible. Return 200 immediately, process async. Fix signature validation. Use webhook testing tools (ngrok for local dev).
+**See also:** `references/integration-patterns.md` Category 1 has four more specific webhook patterns (signature validation with raw-body gotchas, silent no-op processing, duplicate processing, out-of-order delivery) — load it alongside this file for any webhook bug beyond simple non-delivery.
 
 ---
 

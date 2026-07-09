@@ -183,7 +183,7 @@ Output `loose=true strict=false` confirms type juggling in the array search.
 
 ### Pattern: `switch` type coercion — string matches wrong integer case
 **Symptom:** `switch($_GET['action'])` executes wrong case. Input `"1abc"` matches `case 1`. Input `""` matches `case 0` or `case false`. Unexpected code path executes, including privileged operations.
-**Why:** PHP `switch` uses loose comparison for each `case`. `"1abc" == 1` is `true` (string starting with digit coerced to that digit). Any user-controlled string switch against integer cases is a type juggling trap.
+**Why:** PHP `switch` uses loose comparison for each `case`. **PHP 7 only:** `"1abc" == 1` is `true` (string starting with digit coerced to that digit). **PHP 8+ ("saner string to number comparisons" RFC):** a non-well-formed numeric string like `"1abc"` is no longer coerced — `"1abc" == 1` is now `false`, because PHP compares as strings instead when the string isn't fully numeric. The magic-hash `"0e..."` case (two different `"0e..."` hashes both loosely equal to `0`) is unaffected by this RFC and still applies on PHP 8. Confirm the running PHP major version before diagnosing — this pattern only reproduces as described on PHP 7.x.
 **Prove:**
 ```php
 $action = $_GET['action']; // e.g. "1abc"
@@ -220,6 +220,32 @@ error_log('[BIGINT-PROVE] decoded=' . var_export($obj->id, true)
 ```
 If type is `double` instead of `integer` → precision lost.
 **Fix:** `json_decode($json, flags: JSON_BIGINT_AS_STRING)` — keeps large integers as strings. Treat the ID as a string throughout the application.
+
+### Pattern: `foreach` by-reference leaves a dangling alias that corrupts a later loop
+**Symptom:** A `foreach ($arr as &$value) { ... }` loop runs correctly. A LATER, separate `foreach ($arr as $value) { ... }` loop over the SAME array silently corrupts data — typically the last element gets overwritten with the second-to-last element's value, or duplicated.
+**Why:** `foreach (... as &$value)` creates `$value` as a reference to the last array element that persists in scope after the loop ends — PHP does not automatically unset it. The next `foreach ($arr as $value)` (by value, no `&`) reuses the same `$value` variable name; on each iteration it assigns into `$value`, but since `$value` is STILL a reference to `$arr`'s last element from the first loop, that assignment writes through the reference and overwrites the array's actual last element with whatever the loop is currently assigning.
+**Prove:** `var_dump($arr)` immediately before and after the second `foreach`. If the last element's value now equals the second-to-last element's value (or some other loop-iteration value), the dangling reference is confirmed. `unset($value)` after the first loop and re-running eliminates the corruption — a clean before/after test.
+**Fix:** Always `unset()` the reference variable immediately after any by-reference `foreach`:
+```php
+// WRONG — $value stays a reference to $arr's last element after this loop
+foreach ($arr as &$value) {
+    $value = strtoupper($value);
+}
+// ... later, completely unrelated code ...
+foreach ($arr as $value) {   // reuses $value — still aliased to $arr's last element!
+    echo $value;             // this assignment corrupts $arr's real last element
+}
+
+// CORRECT — break the reference immediately after the by-reference loop
+foreach ($arr as &$value) {
+    $value = strtoupper($value);
+}
+unset($value);   // mandatory — breaks the dangling alias
+foreach ($arr as $value) {
+    echo $value;             // safe — $value is a fresh by-value copy again
+}
+```
+**Do NOT:** rename only the second loop's variable as the fix without also considering every OTHER place in the file that reuses the same variable name after a by-reference loop — `unset()` right after the reference loop is the fix that can't be missed by a later, unrelated edit.
 
 ---
 
@@ -286,7 +312,8 @@ Confirm with `php artisan tinker --execute="dump(app()->getBindings());"` — ch
 
 ### Pattern: Middleware not applied to route — authenticated endpoint publicly accessible
 **Symptom:** Protected route accessible without login. `auth` middleware defined. Adding `@auth` check in controller works. Removing it breaks. Middleware class exists and works in isolation.
-**Why:** Middleware registered in `$middlewareAliases` but not applied to the route or group. Or: route defined outside the authenticated group. Or: API routes use `auth:sanctum` but web routes use `auth` — guard mismatch. Or: cached route file is stale.
+**Why:** Middleware registered as an alias but not applied to the route or group. Or: route defined outside the authenticated group. Or: API routes use `auth:sanctum` but web routes use `auth` — guard mismatch. Or: cached route file is stale.
+**Laravel version note:** Laravel ≤10 registers aliases in `app/Http/Kernel.php` (`$middlewareAliases` / `$routeMiddleware`). **Laravel 11+ removed `Kernel.php`** — middleware aliases and global middleware are now registered in `bootstrap/app.php` via `->withMiddleware(fn ($middleware) => $middleware->alias([...]))`. On Laravel 11+, check `bootstrap/app.php` first; `Kernel.php` will not exist.
 **Prove:**
 ```bash
 php artisan route:clear  # clear stale route cache first
@@ -344,7 +371,7 @@ public function posts(): HasMany
 
 ### Pattern: Event listener not firing — observer not registered or mass operation bypasses events
 **Symptom:** `event(new OrderPlaced($order))` dispatched. Listener method never called. No log. No error. Works in `php artisan tinker`.
-**Why:** Two distinct causes: (a) listener not registered in `EventServiceProvider::$listen` or via `Event::listen()` in a provider, (b) mass operations like `Post::where('active', false)->delete()` execute a single SQL DELETE and bypass all model events — they do not instantiate models.
+**Why:** Two distinct causes: (a) listener not registered — Laravel ≤10: check `EventServiceProvider::$listen` or `Event::listen()` in a provider; **Laravel 11+ auto-discovers listeners** by scanning `app/Listeners` for `handle()` methods type-hinted to an event, so a missing registration is instead a missing/misnamed `handle()` type-hint, or discovery disabled via `Event::listen()` calls that were never migrated — (b) mass operations like `Post::where('active', false)->delete()` execute a single SQL DELETE and bypass all model events — they do not instantiate models.
 **Prove:**
 ```bash
 # Check registered event→listener map

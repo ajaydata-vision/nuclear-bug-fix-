@@ -2,6 +2,156 @@
 
 ## [Unreleased]
 
+## [1.26] - 2026-07-09
+
+### Full-repo adversarial review — 6 parallel review passes, factual defects fixed across every reference file
+
+Independent adversarial review of all 16 reference files against the standards
+in `docs/reference-authoring-standards.md` (R1-R10, F1-F6), each claim checked
+against primary sources (OpenJDK JEPs, PHP RFCs, Laravel release notes,
+SpotBugs docs, React Native/Reanimated docs) before being corrected — not
+replacing one unverified claim with another.
+
+**RED-severity defects fixed (wrong diagnosis / no-op fix):**
+- `elixir-patterns.md` — the `assign_async` "stale closure" pattern described
+  a mechanism that cannot occur in Elixir (a rebound `socket` variable is
+  captured at its current value by a closure defined after the rebinding, not
+  before); its own prescribed "fix" was behaviorally a no-op. Rewritten around
+  the real bug: out-of-order completion of concurrent `assign_async` calls on
+  rapid navigation, with a stale-result-discard fix using `handle_async/3`.
+- `react-native-patterns.md` — "Hermes strips console.log in production" is
+  false; Metro's `drop_console` defaults to `false` and Hermes does not
+  special-case `console.*`. Rewritten around the real mechanism (no dev-server
+  sink in release builds) with native-log-reader Prove steps.
+- `react-native-patterns.md` — the Reanimated worklet-crash pattern
+  misattributed dev/prod masking to JSC-vs-Hermes engine choice; the actual
+  variable is remote JS debugging forcing worklets onto the JS thread. Fixed
+  and cross-referenced to the file's own Category 9 pattern describing the
+  same mechanism.
+- `react-native-patterns.md` — `npx react-native-community-releases check` is
+  not a real package; replaced with reactnative.directory, the actual
+  community New Architecture compatibility database.
+- `world-methods.md` (and `SKILL.md` Phase 2F) — two statistics ("median 3.5
+  contributing factors per incident", "40-60% faster resolution") had no
+  locatable source despite being presented as "research-backed" fact.
+  Reworded as defensible qualitative claims; the underlying mechanisms
+  (multi-factor incident mapping, structured-over-reactive debugging) are
+  kept, the fabricated precision is not.
+
+**YELLOW-severity defects fixed (wrong version history, broken cross-refs, structural drift):**
+- `java-patterns.md` — `ScopedValue` finalization misattributed to JDK 22;
+  actually previewed JDK 20-24 (JEP 429/446/464/481/487), finalized JDK 25
+  (JEP 506). `jcmd Thread.print`/`JFR.start` labeled "JDK 17+" when actually
+  available since JDK 7 (jcmd) / JDK 8-11 (JFR). Duplicated, Symptom/Why-less
+  "Reading a thread dump" pattern consolidated into one complete pattern.
+- `dotnet-patterns.md` — routing-hints table said "Npgsql 7 upgrade" for a
+  pattern whose own Why section correctly attributes the bug to Npgsql 6;
+  table row fixed. 3 of 37 patterns (middleware-runs-twice, ApiController
+  HTML-not-JSON, transient IDisposable leak) had no routing-table row,
+  making them unreachable by the standard's own `grep -c '^### Pattern:'`
+  audit method — added.
+- `php-patterns.md` — the `switch` type-coercion pattern (`"1abc" == 1`) is
+  PHP 7-only; PHP 8's "saner string to number comparisons" RFC makes it
+  `false`. Scoped by version. Laravel 11 removed `Kernel.php` in favor of
+  `bootstrap/app.php` middleware/event registration; both affected patterns
+  now branch by Laravel version.
+- `integration-patterns.md` — "Kafka transactions" cited as a general
+  exactly-once fix for duplicate processing; scoped to Kafka-internal
+  pipelines only (external side effects still need idempotent consumers).
+  K8s readiness-probe pattern gained a caveat against checking shared
+  dependencies (correlated-failure outage risk).
+- `intermittent-race-bugs.md` — same jcmd/JFR version overclaim as above;
+  `spotbugs -html report.html` missing the required `-textui` flag and `=`
+  syntax; Python lock-free "Level 1" entry actually described a lock
+  (Level 2), corrected with the GIL-atomicity caveat.
+- `python-desktop-patterns.md`, `bridge-adapter-patterns.md`,
+  `windows-packaging-patterns.md` — all 18 patterns used `## Pattern:` (H2)
+  instead of the `### Pattern:` (H3) every other reference file and the
+  standards doc's own audit grep expect; silently invisible to pattern-count
+  tooling. Normalized. Windows packaging's "onefile extraction race" pattern
+  described a race that cannot occur (bootloader extraction is synchronous
+  and completes before the entry script runs); rewritten around the two real
+  mechanisms (AV/SmartScreen scan latency, and child processes getting their
+  own separate `_MEIPASS`).
+- `frontend-patterns.md` — Category 11 ("Mobile") claimed to be retained only
+  for non-React-Native apps but every pattern body used RN-only APIs
+  (`InteractionManager`, `NetInfo`, `FlatList`) and duplicated
+  `react-native-patterns.md` content. Rewritten as genuinely native-iOS/Android
+  patterns with no RN API references.
+- `README.md`, `CLAUDE.md` — both frozen at v1.12-era numbers (94.2 mean,
+  "14 reference files", "161 cases") despite the repo being 14 releases and
+  4 domains (React Native, PHP, Elixir, .NET) further along. Updated to
+  reflect actual current state, and de-hardcoded version/case-count claims
+  that go stale on every future release.
+
+**New patterns added** (own-knowledge additions, each verified against
+established language/framework semantics, not memory-only claims):
+- `java-patterns.md` — `BigDecimal.equals()` scale-sensitivity trap;
+  JPA entity `hashCode()`-changes-after-persist `HashSet` corruption.
+- `php-patterns.md` — `foreach` by-reference dangling-alias corruption.
+- `elixir-patterns.md` — `config.exs` vs `runtime.exs` env-var timing for
+  `mix release` deploys.
+- `frontend-patterns.md` — Context `Provider` value-identity re-render storm.
+- `backend-patterns.md` — GraphQL resolver-level N+1 (DataLoader batching) —
+  closes a gap where SKILL.md's routing table claimed GraphQL coverage this
+  file didn't have.
+- `integration-patterns.md` — transactional outbox pattern (DB write commits,
+  event publish lost) and gRPC deadline-propagation pattern — closes the
+  same kind of claimed-but-missing gap for gRPC.
+- `windows-packaging-patterns.md` — `multiprocessing.freeze_support()`
+  infinite-spawn bug; Windows SmartScreen unsigned-exe distribution block.
+- `python-desktop-patterns.md` — `PRAGMA busy_timeout`/`WAL` as concrete
+  SQLite lock-contention fixes.
+- `intermittent-race-bugs.md` — deterministic replay debugging (`rr`,
+  WinDbg TTD) as a new highest-leverage Heisenbug technique; Rust
+  concurrency tooling (`loom`, `cargo miri`), previously absent entirely.
+- Cross-references added between `bridge-adapter-patterns.md` and
+  `windows-packaging-patterns.md` for their two overlapping-but-distinct
+  "wrong path" vs. "missing file" patterns (SKILL.md co-loads both files
+  for this exact scenario).
+
+Net: 340 -> 366 patterns (the 18-pattern jump includes the heading-fix
+recount, not just new content). All fixes were independently verified
+(WebSearch against OpenJDK/PHP/Laravel/SpotBugs primary sources, or direct
+re-derivation from language semantics) before being applied — per this
+project's own F3/R2 rule, a correction is not shipped as fact unless it
+clears the same bar the original claim was held to.
+
+## [1.25] - 2026-05-02
+
+### ROCKET command — Phase 2A bypass for guaranteed fast diagnosis
+
+`/nuclear-bug-fix rocket [stack]` (Claude Code) / `$nuclear-bug-fix rocket [stack]`
+(Codex CLI). User names the stack as the first argument; the skill loads the
+matching reference file as its first action, before reading the bug description,
+before any routing or intake questions — Phase 2A is skipped entirely because
+the stack is already known.
+
+Why this is faster: guaranteed-correct routing (the user names the stack, so
+Phase 2A cannot mis-route — wrong routing is the most common cause of a wasted
+diagnosis pass), the reference file is anchored in context before large
+code/log pastes arrive, and stack + bug description can be given in one
+message (`/nuclear-bug-fix rocket java My @Transactional isn't rolling back`).
+13 stack aliases covering all reference files. Phases 3-6 and Phase 4
+co-loading rules run exactly as normal after the reference file loads.
+
+## [1.24] - 2026-05-02
+
+### Codex CLI compatibility — install, update, and invocation support
+
+New `scripts/codex-install.sh` / `scripts/codex-install.ps1` installers,
+targeting `$CODEX_HOME/skills/nuclear-bug-fix/` (default `~/.codex/skills/`),
+self-contained (do not call `install.py`) but sharing the same
+`ALLOWED_TOP_LEVELS` / `FORBIDDEN_TOP_LEVELS` contract as `install.sh`.
+`update.sh`/`update.ps1` already worked for Codex via existing skill-dir
+detection — no new update scripts needed. `SKILL.md`'s update-command section
+and `README.md` now document both Claude Code and Codex CLI invocation paths.
+Two adversarial defects fixed before release: the update-command heading only
+showed Claude Code's `/` syntax (Codex users would try the wrong invocation);
+the installers' "to update later" message embedded a Windows path inside a
+Git-Bash-run command, which doesn't execute. `SKILL.md` methodology and all
+patterns are byte-identical for both platforms — packaging only.
+
 ## [1.23] - 2026-04-27
 
 ### Adversarial Review Hardening

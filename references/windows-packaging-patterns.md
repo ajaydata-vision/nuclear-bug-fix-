@@ -5,7 +5,7 @@ PyInstaller onefile/onedir on Windows.
 
 ---
 
-## Pattern: Source works, packaged build fails because resource path is wrong
+### Pattern: Source works, packaged build fails because resource path is wrong
 
 **Symptom:** App works from source but packaged `.exe` cannot find templates,
 bridge scripts, icons, prompts, or config files.
@@ -45,7 +45,7 @@ source file.
 
 ---
 
-## Pattern: Hidden import missing from packaged build
+### Pattern: Hidden import missing from packaged build
 
 **Symptom:** Packaged app crashes with `ModuleNotFoundError`, dynamic plugin
 import failure, or feature-specific import errors not seen in development.
@@ -82,7 +82,7 @@ bundle contains it.
 
 ---
 
-## Pattern: Qt platform plugin or resource plugin missing in frozen build
+### Pattern: Qt platform plugin or resource plugin missing in frozen build
 
 **Symptom:** Packaged app fails to start with Qt plugin errors like
 `Could not load the Qt platform plugin "windows"`.
@@ -121,7 +121,7 @@ frozen app.
 
 ---
 
-## Pattern: Packaged app writes to a non-writable install path
+### Pattern: Packaged app writes to a non-writable install path
 
 **Symptom:** Sessions, SQLite DB, logs, auth files, or cache fail only from the
 installed `.exe`, often under `Program Files`.
@@ -159,7 +159,7 @@ create it explicitly at startup.
 
 ---
 
-## Pattern: Bundled subprocess or helper script is missing
+### Pattern: Bundled subprocess or helper script is missing
 
 **Symptom:** Packaged parent app starts, but child Node/Python helper never
 launches or exits immediately because the script/binary is absent.
@@ -195,42 +195,100 @@ the frozen runtime layout, and verify the packaged spawn command points there.
 - Helper version matches parent version
 - Failure mode is explicit if helper is missing
 
+**See also:** this pattern is "the file is genuinely absent from the bundle"
+(ENOENT). If the spawn instead resolves to a path that exists but is wrong —
+different failure signature, no ENOENT — see
+`references/bridge-adapter-patterns.md` → "Parent and child use different
+runtime/build assumptions."
+
 ---
 
-## Pattern: Onefile extraction/runtime assumptions break startup ordering
+### Pattern: Onefile startup issues — NOT an extraction race, but AV scanning or a second `_MEIPASS`
 
-**Symptom:** Onefile build behaves differently from onedir: startup race,
-temporary path issues, or first-run-only failures.
+**Symptom:** Onefile build behaves differently from onedir: slow or failing
+first launch, resource-not-found errors, or a spawned child process that
+can't find a bundled file the parent could see fine.
 
 **Strongest signals:**
-- Bug happens only in onefile mode
+- Bug happens only in onefile mode, and mainly on the FIRST launch after
+  install/update (points to AV scanning) — OR only when the app spawns a
+  child process/subprocess of itself (points to the second `_MEIPASS`)
 - Temporary extraction path appears in logs
-- Relative paths or early child spawns happen before extraction-ready state
+- `multiprocessing` is used, or the app re-execs `sys.executable`
 
-**Why:** Onefile apps extract to a temp directory at runtime. Code that assumes a
-stable install directory or immediate helper availability can race extraction or
-target the wrong path.
+**Why — two distinct, unrelated mechanisms, not a startup race:** PyInstaller's
+onefile bootloader extraction to `_MEIPASS` is synchronous and completes
+in full BEFORE your entry-point script's first line ever executes — there
+is no genuine race for resource access within a single process. The two
+real mechanisms that produce this symptom are:
+1. **AV/SmartScreen scanning the freshly-extracted temp exe/files** adds
+   latency on first run, or can quarantine a file mid-extraction, producing
+   a first-run-only failure that looks like a race but is a scanner delay.
+2. **A spawned child process gets its own, separate `_MEIPASS` extraction
+   directory.** If the app uses `multiprocessing` or re-execs
+   `sys.executable` (common in some GUI/worker architectures), each child
+   process re-runs the PyInstaller bootloader and extracts to a NEW temp
+   directory — a path resolved from the PARENT's `_MEIPASS` and handed to
+   the child (e.g. via an argument or env var) is invalid in the child's
+   own extraction directory.
 
 **Prove:**
-- Log frozen mode, extraction path, and the exact moment child/resource access
-  occurs.
-- If helper/resource access happens before the extracted file exists, the cause
-  is confirmed.
+- Log frozen mode and `_MEIPASS` in BOTH the parent and any child process —
+  if they differ, mechanism 2 is confirmed.
+- Log the first-launch wall-clock time from process start to first resource
+  access; a large one-time delay only on a clean machine's first launch
+  (absent on subsequent launches) points to mechanism 1 (AV scan), not code.
 
-**Accepted fix:** Resolve resources from the final extracted path, delay helper
-start until extraction-ready, and test onefile separately from onedir.
+**Accepted fix:** For mechanism 2 — never pass a parent-resolved `_MEIPASS`
+path to a child; each process must resolve its own `getattr(sys, "_MEIPASS", ...)`
+independently, and if the child needs `multiprocessing`, call
+`multiprocessing.freeze_support()` as the first line in `if __name__ == "__main__":`
+(without it, a frozen onefile app on Windows using `multiprocessing.Process`
+can spawn infinitely — each "child" re-runs the whole app from the top,
+which itself spawns another child). For mechanism 1 — code signing the
+executable measurably reduces AV/SmartScreen scan time and quarantine risk;
+don't add sleeps to "wait out" the scan, since scan duration is not
+controllable from inside the process.
 
 **Wrong fixes to reject:**
 - Treat onefile and onedir as interchangeable
-- Add arbitrary sleeps without verifying readiness
-- Blame Windows Defender without path/timing evidence
+- Add arbitrary sleeps assuming there's an extraction race to wait out — there isn't
+- Blame Windows Defender without path/timing evidence, when the actual cause is
+  an unresolved second `_MEIPASS` in a child process
 
 **Sentinel logs:**
 - Frozen mode
-- Extraction path
-- First access timestamp to bundled resource/helper
+- `_MEIPASS` value, logged separately in parent AND any child process
+- First-launch timing from process start to first resource access
 
 **Verify:**
-- Onefile startup works on cold and warm launches
-- Helper/resources resolve after extraction
+- Onefile startup works on cold (post-AV-scan) and warm launches
+- If the app spawns children: child correctly resolves its OWN `_MEIPASS`,
+  not one inherited from the parent
 - Onedir and onefile differences are covered by tests
+
+### Pattern: `multiprocessing.Process` in a frozen onefile app spawns infinitely
+**Symptom:** Onefile Windows build using `multiprocessing` explodes into dozens/hundreds of new processes on launch, or the app appears to hang while spawning windows/processes rapidly. Works fine running from source (`python app.py`).
+**Why:** On Windows, `multiprocessing` re-executes the frozen executable itself to create a new process (there's no `fork()`). Without `multiprocessing.freeze_support()` guarding the entry point, each "child" re-runs the entire script from the top — including the `multiprocessing.Process(...).start()` call that spawned it — so every child spawns another child, recursively.
+**Prove:** Task Manager / Process Explorer during launch shows the process count climbing rapidly with no stabilization. Check whether `if __name__ == "__main__":` wraps both `freeze_support()` and the `Process(...).start()` call — if `freeze_support()` is absent or the multiprocessing entry code sits outside the `__main__` guard, this is confirmed.
+**Fix:**
+```python
+import multiprocessing
+
+def main():
+    p = multiprocessing.Process(target=worker)
+    p.start()
+    p.join()
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()  # must be the first call inside the guard
+    main()
+```
+**Do NOT:** move the `Process(...)` call itself into a `try/except` to "catch" the runaway spawning — that treats the symptom; the guard is the actual fix.
+
+### Pattern: Windows SmartScreen blocks distribution of an unsigned PyInstaller exe
+**Symptom:** End users see "Windows protected your PC" / "Microsoft Defender SmartScreen prevented an unrecognized app from starting" when launching the distributed `.exe`, even though it runs fine on the developer's machine. This is a distribution/first-run blocker for END USERS, distinct from the AV-scan-latency issue above (which affects launch speed, not an outright block).
+**Why:** SmartScreen's reputation system flags executables with no code-signing certificate and low download/install-count reputation. A freshly built, unsigned PyInstaller exe has neither, regardless of how safe the code actually is.
+**Prove:** Reproduce on a clean Windows machine (or VM) that has never run the exe before — SmartScreen's block is reputation-based and won't reliably trigger on a machine that's already run/allowed it once.
+**Fix:** Code-sign the executable with an Authenticode certificate (EV certificates get SmartScreen reputation immediately; standard OV certificates build reputation over time/downloads). Until signed, document the "More info → Run anyway" click-through for users, but do not rely on that as a permanent solution for a public-facing release.
+**Do NOT:** tell users to disable SmartScreen or Windows Defender system-wide — that's a security regression for the user, not a fix for the distribution problem.

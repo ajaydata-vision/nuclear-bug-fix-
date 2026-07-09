@@ -92,6 +92,37 @@ Each pattern: symptom → why → how to prove → how to fix.
 **Prove:** Log the action payload AND the state before/after in the reducer. Are they reaching the right reducer?
 **Fix:** Ensure reducer returns new object (not mutated). Verify action type string exact match. Check selector path.
 
+### Pattern: Every Context consumer re-renders on every parent render — Provider value recreated each render
+**Symptom:** A component wrapped in `React.memo` still re-renders whenever ANY state in the app changes, not just state it actually depends on. Profiler shows every consumer of a particular `Context.Provider` re-rendering together, even ones that only read one field of the context that didn't change.
+**Why:** `<MyContext.Provider value={{ user, theme, setTheme }}>` creates a brand-new object literal on every render of the component that renders the Provider. React's Context propagation triggers a re-render in every consumer whenever the `value` reference changes — object identity, not deep equality. Even if `user` and `theme` are unchanged, the wrapping object `{ user, theme, setTheme }` is a new object every render, so every consumer re-renders regardless of `React.memo` on the consumer itself (memo only blocks re-renders from prop changes, not from Context changes).
+**Prove:** Log `value` object identity (or use the React DevTools Profiler's "why did this render" flag) inside the Provider component across two consecutive renders where the underlying data (`user`, `theme`) is unchanged. A different object reference each time, despite identical field values, confirms this pattern.
+**Fix:** Memoize the Provider's `value` object so its identity is stable across renders where its fields haven't changed:
+```jsx
+// WRONG — new object literal every render, every consumer re-renders every time
+function AppProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [theme, setTheme] = useState('light');
+  return (
+    <MyContext.Provider value={{ user, theme, setTheme }}>
+      {children}
+    </MyContext.Provider>
+  );
+}
+
+// CORRECT — useMemo keeps the value reference stable unless a dependency changes
+function AppProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [theme, setTheme] = useState('light');
+  const value = useMemo(() => ({ user, theme, setTheme }), [user, theme]);
+  return (
+    <MyContext.Provider value={value}>
+      {children}
+    </MyContext.Provider>
+  );
+}
+```
+**Do NOT:** split every context into a dozen single-value contexts as a first response — for high-frequency-updating contexts with many unrelated consumers that's a legitimate next step, but `useMemo` on the value object fixes the common case with a one-line change.
+
 ---
 
 ## CATEGORY 4 — ROUTING & NAVIGATION
@@ -310,7 +341,7 @@ new PerformanceObserver((list) => {
 }).observe({ type: 'event', buffered: true, durationThreshold: 16 });
 ```
 Read the output: **high inputDelayMs** → main thread blocked before handler runs (long task blocking). **High processingMs** → event handler itself is doing too much. **High presentationMs** → excessive re-render after handler.
-**Fix:** For high input delay: break up long tasks with `setTimeout(fn, 0)` or `scheduler.yield()`. For high processing: move heavy work out of the click handler into `requestAnimationFrame` or a Web Worker. For high presentation: reduce component re-render scope (React.memo, useMemo).
+**Fix:** For high input delay: break up long tasks with `setTimeout(fn, 0)` (universal) or `scheduler.yield()` (Chromium-based browsers only as of this writing — feature-detect with `'scheduler' in window && 'yield' in scheduler` and fall back to `setTimeout`). For high processing: move heavy work out of the click handler into `requestAnimationFrame` or a Web Worker. For high presentation: reduce component re-render scope (React.memo, useMemo).
 
 ### Pattern: Page loads slowly — LCP element identified but cause unknown
 **Symptom:** Page feels slow on initial load. Lighthouse shows LCP (Largest Contentful Paint) > 2.5s. The hero image or main heading takes too long to appear. Users see blank space where content should be.
@@ -333,48 +364,38 @@ Then diagnose the cause using the LCP time and Network tab:
 
 ---
 
-## CATEGORY 11 — MOBILE (React Native / iOS / Android)
+## CATEGORY 11 — MOBILE (native iOS / Android, non-React-Native)
 
-> **React Native bugs: load `references/react-native-patterns.md` instead.**
+> **React Native bugs: load `references/react-native-patterns.md` instead — do not use this category.**
 > That file has 26 dedicated patterns across Metro, React Navigation, FlatList,
-> Reanimated, Expo/EAS, AsyncStorage, native modules, permissions, and architecture.
-> The patterns below are retained only for **non-React-Native** native iOS/Android apps.
-
-### Pattern: React Native bridge error / native module crash
-**Symptom:** App crashes or freezes. "NativeModule is null". Bridge exception in logs.
-**Why:** Native module not linked. Platform mismatch. Old RN architecture (Bridge) vs New (JSI). Missing permission.
-**Prove:** Run `adb logcat` (Android) or Xcode console (iOS). Look for native exception stack.
-**Fix:** Re-run `pod install` (iOS). `npx react-native clean`. Check native module linking. For New Architecture: ensure module supports JSI.
+> Reanimated, Expo/EAS, AsyncStorage, native modules, permissions, and architecture,
+> including its own bridge/native-module-crash and freeze/ANR patterns.
+> The patterns below are for **native Swift/Kotlin/Java iOS/Android apps with no
+> JS bridge at all** — a genuinely different bug surface, not a thinner RN duplicate.
 
 ### Pattern: Works on Android, broken on iOS (or vice versa)
 **Symptom:** Feature working on one platform, silently failing on the other.
-**Why:** Platform-specific API behavior. Font rendering. Shadow/elevation differences. Date parsing differences. Permissions model differs.
-**Prove:** Run on both simulators side by side. Check `Platform.OS` branches. Log platform at failure point.
-**Fix:** Add platform-specific code. Use `Platform.select()`. Test on real device — simulators hide some bugs.
+**Why:** Platform-specific API behavior. Font rendering. Shadow/elevation differences. Date/locale parsing differences (`NSDateFormatter` vs `SimpleDateFormat`/`java.time`). Permissions model differs (iOS `Info.plist` usage strings vs Android runtime permission requests).
+**Prove:** Run on both a simulator and a real device for each platform side by side. Log the platform and the exact failing value at the divergence point.
+**Fix:** Add platform-specific code paths. Test on a real device, not just a simulator — simulators hide some platform-specific bugs (permission prompts, background execution limits, memory pressure).
 
-### Pattern: App freezes / ANR on Android
-**Symptom:** App becomes unresponsive. Android shows "App Not Responding". iOS watchdog kills it.
-**Why:** Heavy computation on main/UI thread. Synchronous network call. Long-running operation blocking JS thread.
-**Prove:** Android: check logcat for "ANR in". iOS: capture crash report from device. Look for main thread blocking calls.
-**Fix:** Move heavy work to background thread / worker. Use `InteractionManager.runAfterInteractions()`. Never do sync I/O on main thread.
+### Pattern: App freezes / ANR (Android) or watchdog kill (iOS)
+**Symptom:** App becomes unresponsive. Android shows "App Not Responding". iOS's watchdog terminates the app after ~a few seconds unresponsive on the main thread.
+**Why:** Heavy computation on the main/UI thread. Synchronous network or disk I/O on the main thread. A long-running operation blocking the main run loop / message queue.
+**Prove:** Android: `adb logcat` for `ANR in <package>` and the accompanying `/data/anr/traces.txt` stack. iOS: capture the device's crash/hang report (Xcode Organizer or on-device Settings → Analytics Data) and look for a main-thread stack with no other threads blocking it.
+**Fix:** Move heavy work to a background thread (`DispatchQueue.global()` on iOS, `Executors`/`Coroutines` on Android) and marshal only the final UI update back to the main thread. Never do synchronous network or disk I/O on the main thread.
 
 ### Pattern: Push notification not received
-**Symptom:** Notification sent (confirmed in server logs). Device never shows it.
-**Why:** Device token stale/expired. Permission not granted. Background app refresh disabled. Certificate expired (iOS). FCM/APNs config wrong.
-**Prove:** Check push delivery logs on server. Verify token is current. Check device settings for notification permission.
-**Fix:** Refresh device token on every app launch. Verify FCM/APNs credentials. Test with direct API call to FCM bypassing your server.
-
-### Pattern: Offline data not syncing when reconnected
-**Symptom:** User works offline. Comes back online. Changes lost or not pushed.
-**Why:** Sync logic not triggered on reconnect. Conflict resolution not implemented. Queue cleared on restart.
-**Prove:** Toggle airplane mode. Make changes. Reconnect. Check if sync fires. Log network state changes.
-**Fix:** Use `NetInfo.addEventListener` to trigger sync on reconnect. Persist queue to AsyncStorage/SQLite. Handle conflict resolution explicitly.
+**Symptom:** Notification sent (confirmed in server/APNs/FCM logs). Device never shows it.
+**Why:** Device token stale/expired (tokens rotate — e.g. on reinstall, OS update, or `apns-topic` mismatch). Notification permission not granted. Background app refresh disabled. APNs certificate/key expired. FCM server key or APNs auth key misconfigured on the push provider.
+**Prove:** Check the push provider's delivery/error response for that specific token (APNs returns a definitive rejection reason — `BadDeviceToken`, `Unregistered` — do not assume silent success means delivered). Verify the token stored server-side matches the token the device currently reports at launch.
+**Fix:** Refresh and re-register the device token on every app launch, not just first install. Verify APNs/FCM credentials haven't expired. Test with a direct API call to APNs/FCM bypassing your own server to isolate server-side vs. provider-side failure.
 
 ### Pattern: Memory warning / app killed on device
-**Symptom:** App works fine then suddenly closes. More frequent on older devices.
-**Why:** Memory leak. Large images not released. Too many components mounted. Redux store growing unbounded.
-**Prove:** Xcode Memory Graph (iOS). Android Memory Profiler. Watch memory usage as you navigate.
-**Fix:** Unmount unused components. Compress images. Paginate lists (FlatList, not ScrollView with all items). Clear old data from store.
+**Symptom:** App works fine then suddenly closes. More frequent on older or low-RAM devices.
+**Why:** Memory leak — retained view controllers/activities, image caches never evicted, observers/listeners never unregistered, delegate/closure retain cycles (iOS) or `Context` leaks (Android).
+**Prove:** iOS: Xcode Instruments → Leaks / Memory Graph Debugger, look for unexpected retain cycles. Android: Android Studio Memory Profiler, watch the heap for monotonic growth across navigation without returning to baseline after GC.
+**Fix:** Break retain cycles (`[weak self]` on iOS, avoid holding `Activity`/`Context` references longer than their lifecycle on Android). Downsample and cache-evict large images. Paginate large lists instead of loading everything into memory at once.
 
 ---
 
@@ -604,8 +625,9 @@ console.log('[CIRCULAR] imported value at module init:', importedValue);
 // npx madge --circular src/
 // Output: Circular dependency found: moduleA.js → moduleB.js → moduleA.js
 
-// Vite: vite-plugin-circular-dependency (NOT rollup-plugin-visualizer — that shows bundle size, not cycles)
-// Webpack: circular-dependency-plugin
+// madge (above) is bundler-agnostic and covers Vite projects directly — prefer it.
+// Webpack: circular-dependency-plugin (bundler-specific, build-time detection)
+// ESLint (any bundler): eslint-plugin-import's no-cycle rule catches cycles at lint time
 ```
 **Fix:** Break the cycle. Extract the shared value to a third module that neither A nor B imports from each other. Or restructure so one direction of the import is deferred (inside a function, not at top level).
 
