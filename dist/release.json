@@ -1,9 +1,9 @@
 {
   "skill": "nuclear-bug-fix",
-  "version": "1.25",
-  "source_commit": "f89a372966a71d7666de381a94b66ea93ed060e2",
-  "source_commit_short": "f89a372",
-  "source_date": "2026-05-02",
-  "source_subject": "v1.25: ROCKET command \u2014 Phase 2A bypass for guaranteed fast diagnosis",
+  "version": "1.26",
+  "source_commit": "24b99e49c0295c2402fbb4188c48b9d7300e51e6",
+  "source_commit_short": "24b99e4",
+  "source_date": "2026-07-09",
+  "source_subject": "v1.26: full-repo adversarial review \u2014 6 defect classes fixed, 14 patterns added",
   "artifact": "dist/nuclear-bug-fix.skill"
 }
